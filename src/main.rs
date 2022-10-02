@@ -12,8 +12,8 @@ mod vm;
 
 fn main() {
     match std::env::args().collect::<Vec<_>>().as_slice() {
-        [] => repl(),
-        [file] => run_file(file),
+        [_] => repl(),
+        [_, file] => run_file(file),
         _ => {
             eprintln!("Usage: clox-rs [path]");
             std::process::exit(64);

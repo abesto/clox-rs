@@ -4,6 +4,7 @@ name = "clox-rs"
 version = "0.1.0"
 
 [dependencies]
+itertools = "0.10.5"
 num_enum = "0.5.7"
 shrinkwraprs = "0.3.0"
 thiserror = "1.0.37"

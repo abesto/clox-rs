@@ -7,6 +7,8 @@ Things that were hard, and particularly things where I deviate from `clox` prope
   * `(int)(vm.ip - vm.chunk->code)` has no translation into Rust; instead the `VM::ip` is an iterator over `(code_offset, instruction)`.
 * `#define`-controlled features translate to Cargo features
 * `VM::binary_op` is a higher-order function instead of a macro; hopefully this will be good enough later on.
+* `Token`s store the "pointer" to the lexeme as a slice.
+* `Scanner::scan` (our version of `scanToken()`) departs from "use `Result` for all results", and adopts the magical `Error` token type from the book.
 
 # Challenges
 
