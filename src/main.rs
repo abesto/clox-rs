@@ -1,21 +1,52 @@
-use crate::{
-    chunk::{Line, OpCode},
-    vm::VM,
-};
+use std::io::Write;
+
+use crate::vm::{Error, VM};
 
 mod bitwise;
 mod chunk;
+mod compiler;
+mod scanner;
+mod types;
 mod value;
 mod vm;
 
 fn main() {
-    let mut chunk = chunk::Chunk::new("test chunk");
-    chunk.write_constant(1.2, Line(1));
-    for _ in 0..5000000 {
-        chunk.write_constant(0.1, Line(1));
-        chunk.write(OpCode::Add, Line(4));
-    }
-    chunk.write(OpCode::Return, Line(4));
+    match std::env::args().collect::<Vec<_>>().as_slice() {
+        [] => repl(),
+        [file] => run_file(file),
+        _ => {
+            eprintln!("Usage: clox-rs [path]");
+            std::process::exit(64);
+        }
+    };
+}
+
+fn repl() {
     let mut vm = VM::new();
-    vm.interpret(&chunk).unwrap();
+    loop {
+        print!("> ");
+        std::io::stdout().flush().unwrap();
+        let mut line = String::new();
+        if std::io::stdin().read_line(&mut line).unwrap() > 0 {
+            vm.interpret(&line).unwrap();
+        } else {
+            println!();
+            break;
+        }
+    }
+}
+
+fn run_file(file: &str) {
+    let mut vm = VM::new();
+    match std::fs::read(file) {
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(74);
+        }
+        Ok(contents) => match vm.interpret(std::str::from_utf8(&contents).unwrap()) {
+            Err(Error::CompileError(_)) => std::process::exit(65),
+            Err(Error::RuntimeError) => std::process::exit(70),
+            Ok(_) => {}
+        },
+    }
 }

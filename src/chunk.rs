@@ -1,10 +1,7 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use shrinkwraprs::Shrinkwrap;
 
-use crate::value::Value;
-
-#[derive(Shrinkwrap, PartialEq, Eq, Clone, Copy)]
-pub struct Line(pub usize);
+use crate::{types::Line, value::Value};
 
 #[derive(Shrinkwrap)]
 #[shrinkwrap(mutable)]

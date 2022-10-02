@@ -4,13 +4,20 @@ use thiserror::Error;
 use crate::chunk::InstructionDisassembler;
 use crate::{
     chunk::{Chunk, OpCode},
+    compiler::compile,
     value::Value,
 };
 
 #[derive(Error, Debug)]
-pub enum Error {}
+pub enum Error {
+    #[error("Runtime error placeholder")]
+    RuntimeError,
 
-type Result<T = (), E = Error> = std::result::Result<T, E>;
+    #[error(transparent)]
+    CompileError(#[from] crate::compiler::Error),
+}
+
+pub type Result<T = (), E = Error> = std::result::Result<T, E>;
 
 pub struct VM<'a> {
     chunk: Option<&'a Chunk>,
@@ -28,7 +35,11 @@ impl<'a> VM<'a> {
         }
     }
 
-    pub fn interpret(&mut self, chunk: &'a Chunk) -> Result {
+    pub fn interpret(&mut self, source: &str) -> Result {
+        compile(source).map_err(Error::CompileError)
+    }
+
+    fn _interpret(&mut self, chunk: &'a Chunk) -> Result {
         self.chunk = Some(chunk);
         self.ip = chunk.code().iter().enumerate();
         self.run()
