@@ -46,25 +46,30 @@ impl<'a> VM<'a> {
             #[cfg(feature = "trace_execution")]
             {
                 *disassembler.offset = offset;
-                print!("{:?}", disassembler);
                 println!("          {:?}", self.stack);
+                print!("{:?}", disassembler);
             }
-            match OpCode::try_from(*instruction) {
-                Err(_) => panic!("Internal error: unrecognized opcode {}", instruction),
-                Ok(OpCode::Return) => {
+            match OpCode::try_from(*instruction).expect("Internal error: unrecognized opcode") {
+                OpCode::Return => {
                     println!("{}", self.stack.pop().expect("stack underflow"));
                     return Ok(());
                 }
-                Ok(OpCode::Constant) => {
+                OpCode::Constant => {
                     let value = self.read_constant(false);
                     self.stack.push(value);
                 }
-                Ok(OpCode::ConstantLong) => {
+                OpCode::ConstantLong => {
                     let value = self.read_constant(true);
                     self.stack.push(value);
                 }
-                #[allow(unreachable_patterns)]
-                _ => {}
+                OpCode::Negate => {
+                    let value = -self.stack.pop().unwrap();
+                    self.stack.push(value);
+                }
+                OpCode::Add => self.binary_op(|a, b| a + b),
+                OpCode::Subtract => self.binary_op(|a, b| a - b),
+                OpCode::Multiply => self.binary_op(|a, b| a * b),
+                OpCode::Divide => self.binary_op(|a, b| a / b),
             };
         }
     }
@@ -82,5 +87,11 @@ impl<'a> VM<'a> {
             usize::from(self.read_byte("read_constant"))
         };
         self.chunk.unwrap().get_constant(index)
+    }
+
+    fn binary_op(&mut self, op: fn(Value, Value) -> Value) {
+        let b = self.stack.pop().expect("stack underflow in binary_op");
+        let a = self.stack.pop().expect("stack underflow in binary_op");
+        self.stack.push(op(a, b));
     }
 }

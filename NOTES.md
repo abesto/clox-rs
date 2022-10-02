@@ -6,6 +6,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
   * `Debug` for specific instructions is implemented with a helper struct `InstructionDisassembler` that wraps a `Chunk` reference and an offset. This also allows fully consistent formatting from `Chunk::debug` and execution tracing.
   * `(int)(vm.ip - vm.chunk->code)` has no translation into Rust; instead the `VM::ip` is an iterator over `(code_offset, instruction)`.
 * `#define`-controlled features translate to Cargo features
+* `VM::binary_op` is a higher-order function instead of a macro; hopefully this will be good enough later on.
 
 # Challenges
 

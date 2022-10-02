@@ -21,16 +21,25 @@ pub struct ConstantLongIndex(pub usize);
 pub enum OpCode {
     Constant,
     ConstantLong,
+
+    Negate,
+
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+
     Return,
 }
 
 impl OpCode {
-    /// Length of the instruction in bytes, including operands
+    /// Length of the instruction in bytes, including the operator and operands
     pub fn instruction_len(&self) -> usize {
-        match &self {
-            Self::Constant => 2,
-            Self::ConstantLong => 4,
-            Self::Return => 1,
+        use OpCode::*;
+        match self {
+            Constant => 2,
+            ConstantLong => 4,
+            Negate | Add | Subtract | Multiply | Divide | Return => 1,
         }
     }
 }
@@ -190,6 +199,11 @@ impl<'a> std::fmt::Debug for InstructionDisassembler<'a> {
             OpCode::Constant => self.debug_constant_opcode(f, "OP_CONSTANT", offset),
             OpCode::ConstantLong => self.debug_constant_long_opcode(f, "OP_CONSTANT_LONG", offset),
             OpCode::Return => self.debug_simple_opcode(f, "OP_RETURN"),
+            OpCode::Negate => self.debug_simple_opcode(f, "OP_NEGATE"),
+            OpCode::Add => self.debug_simple_opcode(f, "OP_ADD"),
+            OpCode::Subtract => self.debug_simple_opcode(f, "OP_SUBTRACT"),
+            OpCode::Multiply => self.debug_simple_opcode(f, "OP_MULTIPLY"),
+            OpCode::Divide => self.debug_simple_opcode(f, "OP_DIVIDE"),
         }?;
         Ok(())
     }
