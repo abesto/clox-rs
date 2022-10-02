@@ -12,7 +12,7 @@ pub enum Instruction {
 pub struct Chunk {
     name: String,
     code: Vec<Instruction>,
-    lines: Vec<Line>,
+    lines: Vec<(usize, Line)>,
     constants: Vec<Value>,
 }
 
@@ -31,7 +31,12 @@ impl Chunk {
 
     pub fn write(&mut self, what: Instruction, line: Line) {
         self.code.push(what);
-        self.lines.push(line);
+        match self.lines.last_mut() {
+            Some((count, last_line)) if *last_line == line => {
+                *count += 1;
+            }
+            _ => self.lines.push((1, line)),
+        }
     }
 
     pub fn add_constant(&mut self, what: Value) -> usize {
@@ -45,10 +50,10 @@ impl std::fmt::Debug for Chunk {
         writeln!(f, "== {} ==", self.name)?;
         for (offset, instruction) in self.code.iter().enumerate() {
             write!(f, "{:04} ", offset)?;
-            if offset > 0 && self.lines[offset] == self.lines[offset - 1] {
+            if offset > 0 && self.get_line(offset) == self.get_line(offset - 1) {
                 write!(f, "   | ")?;
             } else {
-                write!(f, "{:>4} ", self.lines[offset])?;
+                write!(f, "{:>4} ", self.get_line(offset))?;
             }
 
             match instruction {
@@ -64,6 +69,17 @@ impl std::fmt::Debug for Chunk {
 
 // Debug helpers
 impl Chunk {
+    fn get_line(&self, offset: usize) -> Line {
+        let mut iter = self.lines.iter();
+        let (mut consumed, mut line) = iter.next().unwrap();
+        while consumed < offset {
+            let entry = iter.next().unwrap();
+            consumed += entry.0;
+            line = entry.1;
+        }
+        line
+    }
+
     fn debug_constant_instruction(
         &self,
         f: &mut std::fmt::Formatter,
