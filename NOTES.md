@@ -1,7 +1,17 @@
 Things that were hard, and particularly things where I deviate from `clox` proper.
 
 * Not implementing a custom dynamic array type; let's use `Vec`. I somewhat expect to run into limitations with that sooner or later as the internals of the array type are exposed in the book, but let's see if that actually happens.
-* `Chunk` / `OpCode` memory layout: we could play along and make `Chunk` store a `Vec<u8>` and cast instructions (`OpCodes`, etc) from/to `u8`. I'll instead take the extra safety and convenience from a `#[repr(C, u8)]` enum, with operators that have operands encoded as fields of the enum variant.
-  * This means disassembled offsets will be off from what's printed by the C version.
+* `Chunk` / `OpCode` memory layout: initially I wanted to use a `#[repr(C, u8)]` enum, with operators that have operands encoded as fields of the enum variant. Even in the simplest case, `std::mem::size_of` said that takes up 16 bytes. That is WAY too much, so we'll do the same kind of tight, manual packing that the C implementation uses.
 * `debug.rs`: implemented the `disassemble*` functions as `impl Debug for Chunk`. An implication of this is that all `Chunk`s store a `name`, which is probably a good idea anyway.
   * Breaking parts out into `impl Debug for Instruction` would need a way to push down (at least) `chunk.constants` into the `Instruction` implementation, which is problematic; I'll pay the price of "no `Debug` for `Instruction`" for some added simplicity.
+
+# Challenges
+
+* `Chunk::lines` uses run-length encoding
+
+# Dependencies
+
+* `num_enum`: More safely and conveniently convert between the `u8` of byte-code and `OpCode`s
+* `shrinkwraprs`: We use `u8` / `usize` for a ton of different meanings. Would be good to not mix them up. This helps with that.
+  * If used incorrectly it'll likely have a pretty bad performance impact, but: first make it correct, then make it fast.
+  * It also leads to a fair bit of `.as_ref()` noise, but... maybe it's still worth it? Let's see.
