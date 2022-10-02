@@ -10,11 +10,10 @@ mod vm;
 
 fn main() {
     let mut chunk = chunk::Chunk::new("test chunk");
-    for i in 0..260 {
-        chunk.write_constant(i.into(), Line(200));
-    }
-    chunk.write(OpCode::Return, Line(123));
-
+    chunk.write_constant(20.0, Line(1));
+    chunk.write_constant(30.0, Line(1));
+    chunk.write_constant(42.0, Line(2));
+    chunk.write(OpCode::Return, Line(2));
     let mut vm = VM::new();
     vm.interpret(&chunk).unwrap();
 }

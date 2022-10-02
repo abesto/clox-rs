@@ -15,6 +15,7 @@ type Result<T = (), E = Error> = std::result::Result<T, E>;
 pub struct VM<'a> {
     chunk: Option<&'a Chunk>,
     ip: std::iter::Enumerate<std::slice::Iter<'a, u8>>,
+    stack: Vec<Value>,
 }
 
 impl<'a> VM<'a> {
@@ -23,6 +24,7 @@ impl<'a> VM<'a> {
         Self {
             chunk: None,
             ip: [].iter().enumerate(),
+            stack: Vec::with_capacity(256),
         }
     }
 
@@ -45,15 +47,21 @@ impl<'a> VM<'a> {
             {
                 *disassembler.offset = offset;
                 print!("{:?}", disassembler);
+                println!("          {:?}", self.stack);
             }
             match OpCode::try_from(*instruction) {
                 Err(_) => panic!("Internal error: unrecognized opcode {}", instruction),
-                Ok(OpCode::Return) => return Ok(()),
+                Ok(OpCode::Return) => {
+                    println!("{}", self.stack.pop().expect("stack underflow"));
+                    return Ok(());
+                }
                 Ok(OpCode::Constant) => {
-                    println!("{}", self.read_constant(false));
+                    let value = self.read_constant(false);
+                    self.stack.push(value);
                 }
                 Ok(OpCode::ConstantLong) => {
-                    println!("{}", self.read_constant(true));
+                    let value = self.read_constant(true);
+                    self.stack.push(value);
                 }
                 #[allow(unreachable_patterns)]
                 _ => {}
