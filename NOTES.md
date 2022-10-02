@@ -8,6 +8,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 # Challenges
 
 * `Chunk::lines` uses run-length encoding
+* `OpCode::ConstantLong` / `OP_CONSTANT_LONG`: support for more than 256 constants
 
 # Dependencies
 

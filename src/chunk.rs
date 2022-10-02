@@ -13,10 +13,14 @@ pub struct CodeOffset(pub usize);
 #[derive(Shrinkwrap)]
 pub struct ConstantIndex(pub u8);
 
+#[derive(Shrinkwrap)]
+pub struct ConstantLongIndex(pub usize);
+
 #[derive(IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
 pub enum OpCode {
     Constant,
+    ConstantLong,
     Return,
 }
 
@@ -53,9 +57,22 @@ impl Chunk {
         }
     }
 
-    pub fn add_constant(&mut self, what: Value) -> ConstantIndex {
+    pub fn write_constant(&mut self, what: Value, line: Line) {
         self.constants.push(what);
-        ConstantIndex(u8::try_from(self.constants.len()).unwrap() - 1)
+        let long_index = self.constants.len() - 1;
+        if let Ok(short_index) = u8::try_from(long_index) {
+            self.write(OpCode::Constant, line);
+            self.write(short_index, line);
+        } else {
+            self.write(OpCode::ConstantLong, line);
+            let (a, b, c, d) = crate::bitwise::get_4_bytes(long_index);
+            if a > 0 {
+                panic!("ToO mAnY cOnStAnTs!1!1");
+            }
+            self.write(b, line);
+            self.write(c, line);
+            self.write(d, line);
+        }
     }
 }
 
@@ -77,6 +94,9 @@ impl std::fmt::Debug for Chunk {
                 .unwrap_or_else(|_| panic!("Unknown opcode: {}", self.code[*offset.as_ref()]))
             {
                 OpCode::Constant => self.debug_constant_opcode(f, "OP_CONSTANT", &offset)?,
+                OpCode::ConstantLong => {
+                    self.debug_constant_long_opcode(f, "OP_CONSTANT_LONG", &offset)?
+                }
                 OpCode::Return => self.debug_simple_opcode(f, "OP_RETURN")?,
             }
         }
@@ -112,6 +132,25 @@ impl Chunk {
             self.constants[usize::from(*constant_index)]
         )?;
         Ok(2)
+    }
+
+    fn debug_constant_long_opcode(
+        &self,
+        f: &mut std::fmt::Formatter,
+        name: &str,
+        offset: &CodeOffset,
+    ) -> Result<usize, std::fmt::Error> {
+        let constant_index = ConstantLongIndex(
+            (usize::from(self.code[offset.as_ref() + 1]) << 16)
+                + (usize::from(self.code[offset.as_ref() + 2]) << 8)
+                + (usize::from(self.code[offset.as_ref() + 3])),
+        );
+        writeln!(
+            f,
+            "{:-16} {:>4} '{}'",
+            name, *constant_index, self.constants[*constant_index]
+        )?;
+        Ok(4)
     }
 
     fn debug_simple_opcode(
