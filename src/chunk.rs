@@ -1,6 +1,7 @@
 use crate::value::Value;
 
 pub type ConstantIndex = usize;
+pub type Line = usize;
 
 #[repr(C, u8)]
 pub enum Instruction {
@@ -11,6 +12,7 @@ pub enum Instruction {
 pub struct Chunk {
     name: String,
     code: Vec<Instruction>,
+    lines: Vec<Line>,
     constants: Vec<Value>,
 }
 
@@ -22,12 +24,14 @@ impl Chunk {
         Chunk {
             name: name.to_string(),
             code: Default::default(),
+            lines: Default::default(),
             constants: Default::default(),
         }
     }
 
-    pub fn write(&mut self, what: Instruction) {
+    pub fn write(&mut self, what: Instruction, line: Line) {
         self.code.push(what);
+        self.lines.push(line);
     }
 
     pub fn add_constant(&mut self, what: Value) -> usize {
@@ -41,6 +45,12 @@ impl std::fmt::Debug for Chunk {
         writeln!(f, "== {} ==", self.name)?;
         for (offset, instruction) in self.code.iter().enumerate() {
             write!(f, "{:04} ", offset)?;
+            if offset > 0 && self.lines[offset] == self.lines[offset - 1] {
+                write!(f, "   | ")?;
+            } else {
+                write!(f, "{:>4} ", self.lines[offset])?;
+            }
+
             match instruction {
                 Instruction::Constant(constant_index) => {
                     self.debug_constant_instruction(f, "OP_CONSTANT", *constant_index)?
@@ -60,6 +70,10 @@ impl Chunk {
         name: &str,
         constant_index: usize,
     ) -> std::fmt::Result {
-        writeln!(f, "{:-16} {:4}", name, self.constants[constant_index])
+        writeln!(
+            f,
+            "{:-16} {:>4} '{}'",
+            name, constant_index, self.constants[constant_index]
+        )
     }
 }
