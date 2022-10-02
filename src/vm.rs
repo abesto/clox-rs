@@ -91,7 +91,7 @@ impl<'a> VM<'a> {
 
     fn binary_op(&mut self, op: fn(Value, Value) -> Value) {
         let b = self.stack.pop().expect("stack underflow in binary_op");
-        let a = self.stack.pop().expect("stack underflow in binary_op");
-        self.stack.push(op(a, b));
+        let a = self.stack.last_mut().expect("stack underflow in binary_op");
+        *a = op(*a, b);
     }
 }

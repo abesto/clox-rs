@@ -12,6 +12,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 
 * `Chunk::lines` uses run-length encoding
 * `OpCode::ConstantLong` / `OP_CONSTANT_LONG`: support for more than 256 constants
+* Optimized negation to mutate the stack value in place, for about a 1.22x speedup. Also did the same for binary operations; strangely, addition (the only one I tested) only sped up by about 1.02x, if that (significant of noise on the measurement).
 
 # Dependencies
 
