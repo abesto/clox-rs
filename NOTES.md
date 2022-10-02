@@ -9,6 +9,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * `VM::binary_op` is a higher-order function instead of a macro; hopefully this will be good enough later on.
 * `Token`s store the "pointer" to the lexeme as a slice.
 * `Scanner::scan` (our version of `scanToken()`) departs from "use `Result` for all results", and adopts the magical `Error` token type from the book.
+* `Scanner`: the `start` / `current` pointer pair is implemented with indices and slices. Using iterators *may* be more performant, and there may be a way to do that, but timed out on it for now.
 
 # Challenges
 

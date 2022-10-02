@@ -28,7 +28,7 @@ fn repl() {
         std::io::stdout().flush().unwrap();
         let mut line = String::new();
         if std::io::stdin().read_line(&mut line).unwrap() > 0 {
-            vm.interpret(&line).unwrap();
+            vm.interpret(line.as_bytes()).unwrap();
         } else {
             println!();
             break;
@@ -43,7 +43,7 @@ fn run_file(file: &str) {
             eprintln!("{}", e);
             std::process::exit(74);
         }
-        Ok(contents) => match vm.interpret(std::str::from_utf8(&contents).unwrap()) {
+        Ok(contents) => match vm.interpret(&contents) {
             Err(Error::CompileError(_)) => std::process::exit(65),
             Err(Error::RuntimeError) => std::process::exit(70),
             Ok(_) => {}

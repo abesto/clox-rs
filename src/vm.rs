@@ -35,7 +35,7 @@ impl<'a> VM<'a> {
         }
     }
 
-    pub fn interpret(&mut self, source: &str) -> Result {
+    pub fn interpret(&mut self, source: &[u8]) -> Result {
         compile(source).map_err(Error::CompileError)
     }
 

@@ -10,7 +10,7 @@ pub enum Error {}
 
 pub type Result<T = (), E = Error> = std::result::Result<T, E>;
 
-pub fn compile(source: &str) -> Result {
+pub fn compile(source: &[u8]) -> Result {
     let mut scanner = Scanner::new(source);
 
     let mut line = Line(0);
@@ -22,7 +22,11 @@ pub fn compile(source: &str) -> Result {
         } else {
             print!("   | ");
         }
-        println!("{:2} '{}'", u8::from(token.kind.clone()), token.lexeme);
+        println!(
+            "{:>13} '{}'",
+            token.kind,
+            std::str::from_utf8(token.lexeme).unwrap()
+        );
 
         if token.kind == TokenKind::Eof {
             break;
