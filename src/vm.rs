@@ -63,8 +63,8 @@ impl<'a> VM<'a> {
                     self.stack.push(value);
                 }
                 OpCode::Negate => {
-                    let value = -self.stack.pop().unwrap();
-                    self.stack.push(value);
+                    let value = self.stack.last_mut().expect("stack underflow in OP_NEGATE");
+                    *value = -*value;
                 }
                 OpCode::Add => self.binary_op(|a, b| a + b),
                 OpCode::Subtract => self.binary_op(|a, b| a - b),
