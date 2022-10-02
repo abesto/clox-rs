@@ -24,6 +24,17 @@ pub enum OpCode {
     Return,
 }
 
+impl OpCode {
+    /// Length of the instruction in bytes, including operands
+    pub fn instruction_len(&self) -> usize {
+        match &self {
+            Self::Constant => 2,
+            Self::ConstantLong => 4,
+            Self::Return => 1,
+        }
+    }
+}
+
 pub struct Chunk {
     name: String,
     code: Vec<u8>,
@@ -42,6 +53,17 @@ impl Chunk {
             lines: Default::default(),
             constants: Default::default(),
         }
+    }
+
+    pub fn code(&self) -> &[u8] {
+        &self.code
+    }
+
+    pub fn get_constant<T>(&self, index: T) -> Value
+    where
+        T: Into<usize>,
+    {
+        self.constants[index.into()]
     }
 
     pub fn write<T>(&mut self, what: T, line: Line)
@@ -79,32 +101,100 @@ impl Chunk {
 impl std::fmt::Debug for Chunk {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "== {} ==", self.name)?;
-        let mut offset = CodeOffset(0);
-        while offset.as_ref() < &self.code.len() {
-            write!(f, "{:04} ", *offset)?;
-            if *offset > 0
-                && self.get_line(&offset) == self.get_line(&CodeOffset(offset.as_ref() - 1))
-            {
-                write!(f, "   | ")?;
-            } else {
-                write!(f, "{:>4} ", *self.get_line(&offset))?;
-            }
-
-            *offset += match OpCode::try_from_primitive(self.code[*offset.as_ref()])
-                .unwrap_or_else(|_| panic!("Unknown opcode: {}", self.code[*offset.as_ref()]))
-            {
-                OpCode::Constant => self.debug_constant_opcode(f, "OP_CONSTANT", &offset)?,
-                OpCode::ConstantLong => {
-                    self.debug_constant_long_opcode(f, "OP_CONSTANT_LONG", &offset)?
-                }
-                OpCode::Return => self.debug_simple_opcode(f, "OP_RETURN")?,
-            }
+        let mut disassembler = InstructionDisassembler::new(self);
+        while disassembler.offset.as_ref() < &self.code.len() {
+            write!(f, "{:?}", disassembler)?;
+            *disassembler.offset +=
+                OpCode::try_from_primitive(self.code[*disassembler.offset.as_ref()])
+                    .unwrap()
+                    .instruction_len();
         }
         Ok(())
     }
 }
 
 // Debug helpers
+pub struct InstructionDisassembler<'a> {
+    chunk: &'a Chunk,
+    pub offset: CodeOffset,
+}
+
+impl<'a> InstructionDisassembler<'a> {
+    #[must_use]
+    pub fn new(chunk: &'a Chunk) -> Self {
+        Self {
+            chunk,
+            offset: CodeOffset(0),
+        }
+    }
+
+    fn debug_constant_opcode(
+        &self,
+        f: &mut std::fmt::Formatter,
+        name: &str,
+        offset: &CodeOffset,
+    ) -> std::fmt::Result {
+        let constant_index = ConstantIndex(self.chunk.code()[offset.as_ref() + 1]);
+        writeln!(
+            f,
+            "{:-16} {:>4} '{}'",
+            name,
+            *constant_index,
+            self.chunk.get_constant(*constant_index.as_ref())
+        )
+    }
+
+    fn debug_constant_long_opcode(
+        &self,
+        f: &mut std::fmt::Formatter,
+        name: &str,
+        offset: &CodeOffset,
+    ) -> std::fmt::Result {
+        let code = self.chunk.code();
+        let constant_index = ConstantLongIndex(
+            (usize::from(code[offset.as_ref() + 1]) << 16)
+                + (usize::from(code[offset.as_ref() + 2]) << 8)
+                + (usize::from(code[offset.as_ref() + 3])),
+        );
+        writeln!(
+            f,
+            "{:-16} {:>4} '{}'",
+            name,
+            *constant_index,
+            self.chunk.get_constant(*constant_index.as_ref())
+        )
+    }
+
+    fn debug_simple_opcode(&self, f: &mut std::fmt::Formatter, name: &str) -> std::fmt::Result {
+        writeln!(f, "{}", name)
+    }
+}
+
+impl<'a> std::fmt::Debug for InstructionDisassembler<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let code = self.chunk.code();
+        let offset = &self.offset;
+
+        write!(f, "{:04} ", *offset.as_ref())?;
+        if *offset.as_ref() > 0
+            && self.chunk.get_line(offset) == self.chunk.get_line(&CodeOffset(offset.as_ref() - 1))
+        {
+            write!(f, "   | ")?;
+        } else {
+            write!(f, "{:>4} ", *self.chunk.get_line(offset))?;
+        }
+
+        match OpCode::try_from_primitive(code[*offset.as_ref()])
+            .unwrap_or_else(|_| panic!("Unknown opcode: {}", code[*offset.as_ref()]))
+        {
+            OpCode::Constant => self.debug_constant_opcode(f, "OP_CONSTANT", offset),
+            OpCode::ConstantLong => self.debug_constant_long_opcode(f, "OP_CONSTANT_LONG", offset),
+            OpCode::Return => self.debug_simple_opcode(f, "OP_RETURN"),
+        }?;
+        Ok(())
+    }
+}
+
 impl Chunk {
     fn get_line(&self, offset: &CodeOffset) -> Line {
         let mut iter = self.lines.iter();
@@ -115,50 +205,5 @@ impl Chunk {
             line = entry.1;
         }
         line
-    }
-
-    fn debug_constant_opcode(
-        &self,
-        f: &mut std::fmt::Formatter,
-        name: &str,
-        offset: &CodeOffset,
-    ) -> Result<usize, std::fmt::Error> {
-        let constant_index = ConstantIndex(self.code[offset.as_ref() + 1]);
-        writeln!(
-            f,
-            "{:-16} {:>4} '{}'",
-            name,
-            *constant_index,
-            self.constants[usize::from(*constant_index)]
-        )?;
-        Ok(2)
-    }
-
-    fn debug_constant_long_opcode(
-        &self,
-        f: &mut std::fmt::Formatter,
-        name: &str,
-        offset: &CodeOffset,
-    ) -> Result<usize, std::fmt::Error> {
-        let constant_index = ConstantLongIndex(
-            (usize::from(self.code[offset.as_ref() + 1]) << 16)
-                + (usize::from(self.code[offset.as_ref() + 2]) << 8)
-                + (usize::from(self.code[offset.as_ref() + 3])),
-        );
-        writeln!(
-            f,
-            "{:-16} {:>4} '{}'",
-            name, *constant_index, self.constants[*constant_index]
-        )?;
-        Ok(4)
-    }
-
-    fn debug_simple_opcode(
-        &self,
-        f: &mut std::fmt::Formatter,
-        name: &str,
-    ) -> Result<usize, std::fmt::Error> {
-        writeln!(f, "{}", name)?;
-        Ok(1)
     }
 }
