@@ -8,4 +8,5 @@ num_enum = "0.5.7"
 shrinkwraprs = "0.3.0"
 
 [features]
+print_code = []
 trace_execution = []

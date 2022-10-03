@@ -207,6 +207,11 @@ impl<'a> Compiler<'a> {
 
     fn end(&mut self) {
         self.emit_return();
+
+        #[cfg(feature = "print_code")]
+        if !self.had_error {
+            println!("{:?}", self.chunk);
+        }
     }
 
     fn binary(&mut self) {
