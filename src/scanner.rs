@@ -298,9 +298,11 @@ impl<'a> Scanner<'a> {
     }
 
     fn make_token(&self, kind: TokenKind) -> Token<'a> {
+        let to = self.current.min(self.source.len());
+        let from = to.min(self.start);
         Token {
             kind,
-            lexeme: &self.source[self.start..self.current.min(self.source.len())],
+            lexeme: &self.source[from..to],
             line: self.line,
         }
     }

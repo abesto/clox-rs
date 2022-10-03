@@ -41,14 +41,13 @@ impl VM {
     }
 
     fn run(&mut self) -> InterpretResult {
-        #[cfg(feature = "trace_execution")]
-        let mut disassembler = InstructionDisassembler::new(self.chunk.unwrap());
         loop {
             #[allow(unused_variables)]
-            let instruction = self.chunk.as_ref().unwrap().code()[self.ip];
+            let instruction = self.read_byte("instruction");
             #[cfg(feature = "trace_execution")]
             {
-                *disassembler.offset = offset;
+                let mut disassembler = InstructionDisassembler::new(&self.chunk.as_ref().unwrap());
+                *disassembler.offset = self.ip - 1;
                 println!("          {:?}", self.stack);
                 print!("{:?}", disassembler);
             }
@@ -79,7 +78,7 @@ impl VM {
 
     fn read_byte(&mut self, msg: &str) -> u8 {
         self.ip += 1;
-        *self.get_byte(self.ip).expect(msg)
+        *self.get_byte(self.ip - 1).expect(msg)
     }
 
     fn get_byte(&self, index: usize) -> Option<&u8> {
