@@ -65,10 +65,17 @@ impl std::fmt::Display for TokenKind {
     }
 }
 
+#[derive(Clone)]
 pub struct Token<'a> {
     pub kind: TokenKind,
     pub lexeme: &'a [u8],
     pub line: Line,
+}
+
+impl<'a> Token<'a> {
+    pub fn as_str(&'a self) -> &'a str {
+        std::str::from_utf8(self.lexeme).unwrap()
+    }
 }
 
 pub struct Scanner<'a> {

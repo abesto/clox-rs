@@ -1,6 +1,8 @@
 use std::io::Write;
 
-use crate::vm::{Error, VM};
+use vm::InterpretResult;
+
+use crate::vm::VM;
 
 mod bitwise;
 mod chunk;
@@ -28,7 +30,7 @@ fn repl() {
         std::io::stdout().flush().unwrap();
         let mut line = String::new();
         if std::io::stdin().read_line(&mut line).unwrap() > 0 {
-            vm.interpret(line.as_bytes()).unwrap();
+            vm.interpret(line.as_bytes());
         } else {
             println!();
             break;
@@ -37,16 +39,18 @@ fn repl() {
 }
 
 fn run_file(file: &str) {
-    let mut vm = VM::new();
     match std::fs::read(file) {
         Err(e) => {
             eprintln!("{}", e);
             std::process::exit(74);
         }
-        Ok(contents) => match vm.interpret(&contents) {
-            Err(Error::CompileError(_)) => std::process::exit(65),
-            Err(Error::RuntimeError) => std::process::exit(70),
-            Ok(_) => {}
-        },
+        Ok(contents) => {
+            let mut vm = VM::new();
+            match vm.interpret(&contents) {
+                InterpretResult::CompileError => std::process::exit(65),
+                InterpretResult::RuntimeError => std::process::exit(70),
+                InterpretResult::Ok => {}
+            }
+        }
     }
 }

@@ -1,69 +1,61 @@
-use thiserror::Error;
-
 #[cfg(feature = "trace_execution")]
 use crate::chunk::InstructionDisassembler;
 use crate::{
     chunk::{Chunk, OpCode},
-    compiler::compile,
+    compiler::Compiler,
     value::Value,
 };
 
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("Runtime error placeholder")]
+#[derive(Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum InterpretResult {
+    Ok,
+    CompileError,
     RuntimeError,
-
-    #[error(transparent)]
-    CompileError(#[from] crate::compiler::Error),
 }
 
-pub type Result<T = (), E = Error> = std::result::Result<T, E>;
-
-pub struct VM<'a> {
-    chunk: Option<&'a Chunk>,
-    ip: std::iter::Enumerate<std::slice::Iter<'a, u8>>,
+pub struct VM {
+    chunk: Option<Chunk>,
+    ip: usize,
     stack: Vec<Value>,
 }
 
-impl<'a> VM<'a> {
+impl VM {
     #[must_use]
     pub fn new() -> Self {
         Self {
             chunk: None,
-            ip: [].iter().enumerate(),
+            ip: 0,
             stack: Vec::with_capacity(256),
         }
     }
 
-    pub fn interpret(&mut self, source: &[u8]) -> Result {
-        compile(source).map_err(Error::CompileError)
+    pub fn interpret(&mut self, source: &[u8]) -> InterpretResult {
+        if let Some(chunk) = Compiler::compile(source) {
+            self.chunk = Some(chunk);
+            self.ip = 0;
+            self.run()
+        } else {
+            InterpretResult::CompileError
+        }
     }
 
-    fn _interpret(&mut self, chunk: &'a Chunk) -> Result {
-        self.chunk = Some(chunk);
-        self.ip = chunk.code().iter().enumerate();
-        self.run()
-    }
-
-    fn run(&mut self) -> Result {
+    fn run(&mut self) -> InterpretResult {
         #[cfg(feature = "trace_execution")]
         let mut disassembler = InstructionDisassembler::new(self.chunk.unwrap());
         loop {
             #[allow(unused_variables)]
-            let (offset, instruction) = self
-                .ip
-                .next()
-                .expect("Internal error: ran out of instructions");
+            let instruction = self.chunk.as_ref().unwrap().code()[self.ip];
             #[cfg(feature = "trace_execution")]
             {
                 *disassembler.offset = offset;
                 println!("          {:?}", self.stack);
                 print!("{:?}", disassembler);
             }
-            match OpCode::try_from(*instruction).expect("Internal error: unrecognized opcode") {
+            match OpCode::try_from(instruction).expect("Internal error: unrecognized opcode") {
                 OpCode::Return => {
                     println!("{}", self.stack.pop().expect("stack underflow"));
-                    return Ok(());
+                    return InterpretResult::Ok;
                 }
                 OpCode::Constant => {
                     let value = self.read_constant(false);
@@ -86,7 +78,12 @@ impl<'a> VM<'a> {
     }
 
     fn read_byte(&mut self, msg: &str) -> u8 {
-        *self.ip.next().expect(msg).1
+        self.ip += 1;
+        *self.get_byte(self.ip).expect(msg)
+    }
+
+    fn get_byte(&self, index: usize) -> Option<&u8> {
+        self.chunk.as_ref().unwrap().code().get(index)
     }
 
     fn read_constant(&mut self, long: bool) -> Value {
@@ -97,7 +94,7 @@ impl<'a> VM<'a> {
         } else {
             usize::from(self.read_byte("read_constant"))
         };
-        self.chunk.unwrap().get_constant(index)
+        self.chunk.as_ref().unwrap().get_constant(index)
     }
 
     fn binary_op(&mut self, op: fn(Value, Value) -> Value) {

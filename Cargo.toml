@@ -6,7 +6,6 @@ version = "0.1.0"
 [dependencies]
 num_enum = "0.5.7"
 shrinkwraprs = "0.3.0"
-thiserror = "1.0.37"
 
 [features]
 trace_execution = []
