@@ -6,7 +6,7 @@ use crate::types::Line;
 #[derive(Shrinkwrap, PartialEq, Eq, Clone, Copy)]
 pub struct TokenLength(pub usize);
 
-#[derive(IntoPrimitive, TryFromPrimitive, PartialEq, Eq, Clone, Debug)]
+#[derive(IntoPrimitive, TryFromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
 #[repr(u8)]
 pub enum TokenKind {
     // Single-Character Tokens.

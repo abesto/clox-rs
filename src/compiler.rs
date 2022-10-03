@@ -7,7 +7,7 @@ use crate::{
     value::Value,
 };
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, TryFromPrimitive, IntoPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, TryFromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 enum Precedence {
     None,
@@ -23,8 +23,92 @@ enum Precedence {
     Primary,
 }
 
-struct Rule {
+type ParseFn<'a> = fn(&mut Compiler<'a>) -> ();
+
+struct Rule<'a> {
+    prefix: Option<ParseFn<'a>>,
+    infix: Option<ParseFn<'a>>,
     precedence: Precedence,
+}
+
+impl<'a> Default for Rule<'a> {
+    fn default() -> Self {
+        Self {
+            prefix: Default::default(),
+            infix: Default::default(),
+            precedence: Precedence::None,
+        }
+    }
+}
+
+macro_rules! make_rules {
+    (@parse_fn None) => { None };
+    (@parse_fn $prefix:ident) => { Some(Compiler::$prefix) };
+
+    ($($token:ident = [$prefix:ident, $infix:ident, $precedence:ident]),* $(,)?) => {{
+        // Horrible hack to pre-fill the array with *something* before assigning the right values based on the macro input
+        // Needed because `Rule` cannot be `Copy` (due to `fn`s)
+        let mut rules = [$(Rule { prefix: make_rules!(@parse_fn $prefix), infix: make_rules!(@parse_fn $infix), precedence: Precedence::$precedence }),*];
+        $(
+            rules[TokenKind::$token as usize] = Rule {
+                prefix: make_rules!(@parse_fn $prefix),
+                infix: make_rules!(@parse_fn $infix),
+                precedence: Precedence::$precedence
+            };
+        )*
+        rules
+    }};
+}
+
+type Rules<'a> = [Rule<'a>; 42];
+
+// Can't be static because the associated function types include lifetimes
+#[rustfmt::skip]
+fn make_rules<'a>() -> Rules<'a> {
+    make_rules!(
+        LeftParen    = [grouping, None,   None],
+        RightParen   = [None,     None,   None],
+        LeftParen    = [grouping, None,   None],
+        RightParen   = [None,     None,   None],
+        LeftBrace    = [None,     None,   None],
+        RightBrace   = [None,     None,   None],
+        Comma        = [None,     None,   None],
+        Dot          = [None,     None,   None],
+        Minus        = [unary,    binary, Term],
+        Plus         = [None,     binary, Term],
+        Semicolon    = [None,     None,   None],
+        Slash        = [None,     binary, Factor],
+        Star         = [None,     binary, Factor],
+        Bang         = [None,     None,   None],
+        BangEqual    = [None,     None,   None],
+        Equal        = [None,     None,   None],
+        EqualEqual   = [None,     None,   None],
+        Greater      = [None,     None,   None],
+        GreaterEqual = [None,     None,   None],
+        Less         = [None,     None,   None],
+        LessEqual    = [None,     None,   None],
+        Identifier   = [None,     None,   None],
+        String       = [None,     None,   None],
+        Number       = [number,   None,   None],
+        And          = [None,     None,   None],
+        Class        = [None,     None,   None],
+        Else         = [None,     None,   None],
+        False        = [None,     None,   None],
+        For          = [None,     None,   None],
+        Fun          = [None,     None,   None],
+        If           = [None,     None,   None],
+        Nil          = [None,     None,   None],
+        Or           = [None,     None,   None],
+        Print        = [None,     None,   None],
+        Return       = [None,     None,   None],
+        Super        = [None,     None,   None],
+        This         = [None,     None,   None],
+        True         = [None,     None,   None],
+        Var          = [None,     None,   None],
+        While        = [None,     None,   None],
+        Error        = [None,     None,   None],
+        Eof          = [None,     None,   None],
+    )
 }
 
 pub struct Compiler<'a> {
@@ -34,6 +118,7 @@ pub struct Compiler<'a> {
     had_error: bool,
     panic_mode: bool,
     chunk: Chunk,
+    rules: Rules<'a>,
 }
 
 impl<'a> Compiler<'a> {
@@ -46,6 +131,7 @@ impl<'a> Compiler<'a> {
             current: None,
             had_error: false,
             panic_mode: false,
+            rules: make_rules(),
         }
     }
 
@@ -124,7 +210,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn binary(&mut self) {
-        let operator = &self.previous.as_ref().unwrap().kind;
+        let operator = self.previous.as_ref().unwrap().kind;
         let line = self.line();
         let rule = self.get_rule(operator);
 
@@ -153,7 +239,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn unary(&mut self) {
-        let operator = &self.previous.as_ref().unwrap().kind;
+        let operator = self.previous.as_ref().unwrap().kind;
         let line = self.line();
 
         // Compile the operand
@@ -166,8 +252,26 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn parse_precedence(&self, precedence: Precedence) {
-        todo!();
+    fn parse_precedence(&mut self, precedence: Precedence) {
+        self.advance();
+        if let Some(prefix_rule) = self.get_rule(self.previous.as_ref().unwrap().kind).prefix {
+            prefix_rule(self);
+
+            while precedence
+                < self
+                    .get_rule(self.current.as_ref().unwrap().kind)
+                    .precedence
+            {
+                self.advance();
+                let infix_rule = self
+                    .get_rule(self.previous.as_ref().unwrap().kind)
+                    .infix
+                    .unwrap();
+                infix_rule(self);
+            }
+        } else {
+            self.error("Expected expression.");
+        }
     }
 
     fn current_chunk(&mut self) -> &mut Chunk {
@@ -201,11 +305,11 @@ impl<'a> Compiler<'a> {
         self.had_error = true;
     }
 
-    fn expression(&self) {
+    fn expression(&mut self) {
         self.parse_precedence(Precedence::Assignment);
     }
 
-    fn get_rule(&self, operator: &TokenKind) -> Rule {
-        todo!()
+    fn get_rule(&self, operator: TokenKind) -> &Rule<'a> {
+        &self.rules[operator as usize]
     }
 }
