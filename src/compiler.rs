@@ -1,3 +1,5 @@
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+
 use crate::{
     chunk::{Chunk, OpCode},
     scanner::{Scanner, Token, TokenKind},
@@ -5,7 +7,8 @@ use crate::{
     value::Value,
 };
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, TryFromPrimitive, IntoPrimitive)]
+#[repr(u8)]
 enum Precedence {
     None,
     Assignment, // =
@@ -18,6 +21,10 @@ enum Precedence {
     Unary,      // ! -
     Call,       // . ()
     Primary,
+}
+
+struct Rule {
+    precedence: Precedence,
 }
 
 pub struct Compiler<'a> {
@@ -116,6 +123,25 @@ impl<'a> Compiler<'a> {
         self.emit_return();
     }
 
+    fn binary(&mut self) {
+        let operator = &self.previous.as_ref().unwrap().kind;
+        let line = self.line();
+        let rule = self.get_rule(operator);
+
+        self.parse_precedence(
+            Precedence::try_from_primitive(u8::from(rule.precedence) + 1).unwrap(),
+        );
+
+        // Emit the operator
+        match operator {
+            TokenKind::Plus => self.emit_byte(OpCode::Add, line),
+            TokenKind::Minus => self.emit_byte(OpCode::Subtract, line),
+            TokenKind::Star => self.emit_byte(OpCode::Multiply, line),
+            TokenKind::Slash => self.emit_byte(OpCode::Divide, line),
+            _ => unreachable!("unknown binary operator: {}", operator),
+        }
+    }
+
     fn grouping(&mut self) {
         self.expression();
         self.consume(TokenKind::RightParen, "Expect ')' after expression.");
@@ -177,5 +203,9 @@ impl<'a> Compiler<'a> {
 
     fn expression(&self) {
         self.parse_precedence(Precedence::Assignment);
+    }
+
+    fn get_rule(&self, operator: &TokenKind) -> Rule {
+        todo!()
     }
 }
