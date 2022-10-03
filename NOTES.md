@@ -11,12 +11,14 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * Unlike [`jlox-rs`](https://github.com/abesto/jlox-rs/), error reporting on initial implementation follows closely the error reporting logic of the book so that I have less to mentally juggle. Might end up refactoring afterwards to use `Result`s.
 * `Scanner`: the `start` / `current` pointer pair is implemented with indices and slices. Using iterators *may* be more performant, and there may be a way to do that, but timed out on it for now.
 * My `Compiler::emit_byte` takes the line number as argument for correct error reporting (See the sidebar in 17.4.3 of the book)
+* The Pratt parser table creation is a bit of a mess due to 1. constraints on array initialization and 2. lifetimes. We create a new instance of the table for each `Compiler` instance, because the compiler instance has a lifetime, and its associated methods capture that lifetime, and so the function references must also capture that same lifetime.
 
 # Challenges
 
 * `Chunk::lines` uses run-length encoding
 * `OpCode::ConstantLong` / `OP_CONSTANT_LONG`: support for more than 256 constants
 * Optimized negation to mutate the stack value in place, for about a 1.22x speedup. Also did the same for binary operations; strangely, addition (the only one I tested) only sped up by about 1.02x, if that (significant of noise on the measurement).
+* TODO ternary operator
 
 # Dependencies
 
