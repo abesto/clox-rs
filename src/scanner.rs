@@ -191,6 +191,8 @@ impl<'a> Scanner<'a> {
                         while let Some(b'\n') | None = self.peek() {
                             self.advance();
                         }
+                    } else {
+                        break;
                     }
                 }
                 _ => break,
