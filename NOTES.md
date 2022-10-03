@@ -10,6 +10,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * `Token`s store the "pointer" to the lexeme as a slice.
 * Unlike [`jlox-rs`](https://github.com/abesto/jlox-rs/), error reporting on initial implementation follows closely the error reporting logic of the book so that I have less to mentally juggle. Might end up refactoring afterwards to use `Result`s.
 * `Scanner`: the `start` / `current` pointer pair is implemented with indices and slices. Using iterators *may* be more performant, and there may be a way to do that, but timed out on it for now.
+* My `Compiler::emit_byte` takes the line number as argument for correct error reporting (See the sidebar in 17.4.3 of the book)
 
 # Challenges
 

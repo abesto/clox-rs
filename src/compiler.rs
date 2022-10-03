@@ -1,7 +1,24 @@
 use crate::{
     chunk::{Chunk, OpCode},
     scanner::{Scanner, Token, TokenKind},
+    types::Line,
+    value::Value,
 };
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Precedence {
+    None,
+    Assignment, // =
+    Or,         // or
+    And,        // and
+    Equality,   // == !=
+    Comparison, // < > <= >=
+    Term,       // + -
+    Factor,     // * /
+    Unary,      // ! -
+    Call,       // . ()
+    Primary,
+}
 
 pub struct Compiler<'a> {
     scanner: Scanner<'a>,
@@ -65,29 +82,66 @@ impl<'a> Compiler<'a> {
         self.error_at_current(msg);
     }
 
-    fn emit_byte<T>(&mut self, byte: T)
+    fn line(&self) -> Line {
+        self.previous.as_ref().unwrap().line
+    }
+
+    fn emit_byte<T>(&mut self, byte: T, line: Line)
     where
         T: Into<u8>,
     {
-        let line = self.previous.as_ref().unwrap().line;
         self.current_chunk().write(byte, line)
     }
 
-    fn emit_bytes<T1, T2>(&mut self, byte1: T1, byte2: T2)
+    fn emit_bytes<T1, T2>(&mut self, byte1: T1, byte2: T2, line: Line)
     where
         T1: Into<u8>,
         T2: Into<u8>,
     {
-        self.emit_byte(byte1);
-        self.emit_byte(byte2);
+        self.emit_byte(byte1, line);
+        self.emit_byte(byte2, line);
     }
 
     fn emit_return(&mut self) {
-        self.emit_byte(OpCode::Return);
+        self.emit_byte(OpCode::Return, self.line());
+    }
+
+    fn emit_constant(&mut self, value: Value) {
+        if !self.chunk.write_constant(value, self.line()) {
+            self.error("Too many constants in one chunk.");
+        }
     }
 
     fn end(&mut self) {
         self.emit_return();
+    }
+
+    fn grouping(&mut self) {
+        self.expression();
+        self.consume(TokenKind::RightParen, "Expect ')' after expression.");
+    }
+
+    fn number(&mut self) {
+        let value: f64 = self.previous.as_ref().unwrap().as_str().parse().unwrap();
+        self.emit_constant(value);
+    }
+
+    fn unary(&mut self) {
+        let operator = &self.previous.as_ref().unwrap().kind;
+        let line = self.line();
+
+        // Compile the operand
+        self.parse_precedence(Precedence::Unary);
+
+        // Emit the operator
+        match operator {
+            TokenKind::Minus => self.emit_byte(OpCode::Negate, line),
+            _ => unreachable!("unary but not negation: {}", operator),
+        }
+    }
+
+    fn parse_precedence(&self, precedence: Precedence) {
+        todo!();
     }
 
     fn current_chunk(&mut self) -> &mut Chunk {
@@ -122,6 +176,6 @@ impl<'a> Compiler<'a> {
     }
 
     fn expression(&self) {
-        todo!()
+        self.parse_precedence(Precedence::Assignment);
     }
 }

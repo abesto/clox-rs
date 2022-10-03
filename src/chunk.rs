@@ -85,7 +85,7 @@ impl Chunk {
         }
     }
 
-    pub fn write_constant(&mut self, what: Value, line: Line) {
+    pub fn write_constant(&mut self, what: Value, line: Line) -> bool {
         self.constants.push(what);
         let long_index = self.constants.len() - 1;
         if let Ok(short_index) = u8::try_from(long_index) {
@@ -95,12 +95,13 @@ impl Chunk {
             self.write(OpCode::ConstantLong, line);
             let (a, b, c, d) = crate::bitwise::get_4_bytes(long_index);
             if a > 0 {
-                panic!("ToO mAnY cOnStAnTs!1!1");
+                return false;
             }
             self.write(b, line);
             self.write(c, line);
             self.write(d, line);
         }
+        return true;
     }
 }
 
