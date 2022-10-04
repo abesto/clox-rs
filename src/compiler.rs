@@ -88,7 +88,7 @@ fn make_rules<'a>() -> Rules<'a> {
         Less         = [None,     binary, Comparison],
         LessEqual    = [None,     binary, Comparison],
         Identifier   = [None,     None,   None],
-        String       = [None,     None,   None],
+        String       = [string,   None,   None],
         Number       = [number,   None,   None],
         And          = [None,     None,   None],
         Class        = [None,     None,   None],
@@ -259,6 +259,12 @@ impl<'a> Compiler<'a> {
 
     fn number(&mut self) {
         let value: f64 = self.previous.as_ref().unwrap().as_str().parse().unwrap();
+        self.emit_constant(value);
+    }
+
+    fn string(&mut self) {
+        let lexeme = self.previous.as_ref().unwrap().as_str();
+        let value = lexeme[1..lexeme.len() - 1].to_string();
         self.emit_constant(value);
     }
 
