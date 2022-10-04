@@ -18,8 +18,6 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 
 # TODO
 
-Stuff I want to do, but postponing to see if it's covered in the book
-
 * Drop the VM stack after we're done interpreting a piece of code. In the REPL, stuff can stay there after runtime errors.
 
 # Challenges
@@ -29,6 +27,8 @@ Stuff I want to do, but postponing to see if it's covered in the book
 * Optimized negation to mutate the stack value in place, for about a 1.22x speedup. Also did the same for binary operations; strangely, addition (the only one I tested) only sped up by about 1.02x, if that (significant of noise on the measurement).
 * TODO ternary operator
 * STRETCH: add error handling to user code
+* TODO add a `Value` variant that holds a reference to a string value kept alive somewhere else (Chapter 19)
+  * Doing this with lifetimes seems (almost?) impossible: `VM` has both a `Chunk` and a stack, and its stack may have values from multiple chunks, so there's no good `a` for a `Value<'a>`. `Rc` is probably a sane solution to this, but I want to see what future memory management shenanigans we get up to before implementing this.
 
 # Dependencies
 
