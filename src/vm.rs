@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 #[cfg(feature = "trace_execution")]
 use crate::chunk::InstructionDisassembler;
 use crate::{
@@ -36,6 +38,7 @@ pub struct VM {
     chunk: Option<Chunk>,
     ip: usize,
     stack: Vec<Value>,
+    globals: HashMap<String, Value>,
 }
 
 impl VM {
@@ -45,6 +48,7 @@ impl VM {
             chunk: None,
             ip: 0,
             stack: Vec::with_capacity(256),
+            globals: HashMap::new(),
         }
     }
 
@@ -82,6 +86,25 @@ impl VM {
                 }
                 OpCode::Pop => {
                     self.stack.pop().expect("stack underflow in OP_POP");
+                }
+                OpCode::DefineGlobal => {
+                    let name_value = self.read_constant(false).clone();
+                    match name_value {
+                        Value::String(name) => {
+                            self.globals.insert(
+                                *name,
+                                self.stack
+                                    .last()
+                                    .expect("stack underflow in OP_DEFINE_GLOBAL")
+                                    .clone(),
+                            );
+                            self.stack.pop();
+                        }
+                        x => panic!(
+                            "Internal error: non-string operand to OP_DEFINE_GLOBAL: {:?}",
+                            x
+                        ),
+                    }
                 }
                 OpCode::Return => {
                     return InterpretResult::Ok;

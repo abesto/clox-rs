@@ -18,6 +18,8 @@ pub struct ConstantLongIndex(pub usize);
 pub enum OpCode {
     Constant,
     ConstantLong,
+    DefineGlobal,
+
     Nil,
     True,
     False,
@@ -47,7 +49,7 @@ impl OpCode {
             Constant => 2,
             ConstantLong => 4,
             Negate | Add | Subtract | Multiply | Divide | Return | Nil | True | False | Not
-            | Equal | Greater | Less | Print | Pop => 1,
+            | Equal | Greater | Less | Print | Pop | DefineGlobal => 1,
         }
     }
 }
@@ -96,15 +98,19 @@ impl Chunk {
         }
     }
 
-    pub fn write_constant(&mut self, what: Value, line: Line) -> bool {
+    pub fn make_constant(&mut self, what: Value) -> ConstantLongIndex {
         self.constants.push(what);
-        let long_index = self.constants.len() - 1;
-        if let Ok(short_index) = u8::try_from(long_index) {
+        ConstantLongIndex(self.constants.len() - 1)
+    }
+
+    pub fn write_constant(&mut self, what: Value, line: Line) -> bool {
+        let long_index = self.make_constant(what);
+        if let Ok(short_index) = u8::try_from(*long_index) {
             self.write(OpCode::Constant, line);
             self.write(short_index, line);
         } else {
             self.write(OpCode::ConstantLong, line);
-            let (a, b, c, d) = crate::bitwise::get_4_bytes(long_index);
+            let (a, b, c, d) = crate::bitwise::get_4_bytes(*long_index);
             if a > 0 {
                 return false;
             }
@@ -222,6 +228,7 @@ impl<'a> std::fmt::Debug for InstructionDisassembler<'a> {
             OpCode::Less => self.debug_simple_opcode(f, "OP_LESS"),
             OpCode::Print => self.debug_simple_opcode(f, "OP_PRINT"),
             OpCode::Pop => self.debug_simple_opcode(f, "OP_POP"),
+            OpCode::DefineGlobal => self.debug_simple_opcode(f, "OP_DEFINE_GLOBAL"),
         }?;
         Ok(())
     }

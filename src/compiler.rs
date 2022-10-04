@@ -1,7 +1,7 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::{
-    chunk::{Chunk, OpCode},
+    chunk::{Chunk, ConstantLongIndex, OpCode},
     scanner::{Scanner, Token, TokenKind as TK},
     types::Line,
     value::Value,
@@ -308,6 +308,26 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    fn identifier_constant<S>(&mut self, name: S) -> ConstantLongIndex
+    where
+        S: ToString,
+    {
+        self.current_chunk().make_constant(name.to_string().into())
+    }
+
+    fn parse_variable(&mut self, msg: &str) -> ConstantLongIndex {
+        self.consume(TK::Identifier, msg);
+        self.identifier_constant(self.previous.as_ref().unwrap().as_str().to_string())
+    }
+
+    fn define_variable(&mut self, global: ConstantLongIndex) {
+        if let Ok(short) = u8::try_from(*global) {
+            self.emit_bytes(OpCode::DefineGlobal, short, self.line());
+        } else {
+            self.error("Too many globals!")
+        }
+    }
+
     fn current_chunk(&mut self) -> &mut Chunk {
         &mut self.chunk
     }
@@ -342,6 +362,19 @@ impl<'a> Compiler<'a> {
         self.parse_precedence(Precedence::Assignment);
     }
 
+    fn var_declaration(&mut self) {
+        let global = self.parse_variable("Expect variable name.");
+
+        if self.match_(TK::Equal) {
+            self.expression();
+        } else {
+            self.emit_byte(OpCode::Nil, self.line());
+        }
+        self.consume(TK::Semicolon, "Expect ';' after variable declaration.");
+
+        self.define_variable(global);
+    }
+
     fn expression_statement(&mut self) {
         let line = self.line();
         self.expression();
@@ -350,7 +383,12 @@ impl<'a> Compiler<'a> {
     }
 
     fn declaration(&mut self) {
-        self.statement();
+        if self.match_(TK::Var) {
+            self.var_declaration();
+        } else {
+            self.statement();
+        }
+
         if self.panic_mode {
             self.synchronize();
         }
