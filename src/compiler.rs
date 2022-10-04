@@ -2,7 +2,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::{
     chunk::{Chunk, OpCode},
-    scanner::{Scanner, Token, TokenKind},
+    scanner::{Scanner, Token, TokenKind as TK},
     types::Line,
     value::Value,
 };
@@ -50,7 +50,7 @@ macro_rules! make_rules {
         // Needed because `Rule` cannot be `Copy` (due to `fn`s)
         let mut rules = [$(Rule { prefix: make_rules!(@parse_fn $prefix), infix: make_rules!(@parse_fn $infix), precedence: Precedence::$precedence }),*];
         $(
-            rules[TokenKind::$token as usize] = Rule {
+            rules[TK::$token as usize] = Rule {
                 prefix: make_rules!(@parse_fn $prefix),
                 infix: make_rules!(@parse_fn $infix),
                 precedence: Precedence::$precedence
@@ -137,8 +137,11 @@ impl<'a> Compiler<'a> {
 
     fn compile_(mut self) -> Option<Chunk> {
         self.advance();
-        self.expression();
-        self.consume(TokenKind::Eof, "Expect end of expression.");
+
+        while !self.match_(TK::Eof) {
+            self.declaration();
+        }
+
         self.end();
         if self.had_error {
             None
@@ -156,7 +159,7 @@ impl<'a> Compiler<'a> {
         loop {
             let token = self.scanner.scan();
             self.current = Some(token);
-            if self.current.as_ref().unwrap().kind != TokenKind::Error {
+            if !self.check(TK::Error) {
                 break;
             }
             // Could manually recursively inline `error_at_current` to get rid of this string copy,
@@ -166,8 +169,8 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn consume(&mut self, kind: TokenKind, msg: &str) {
-        if self.current.as_ref().map(|t| &t.kind) == Some(&kind) {
+    fn consume(&mut self, kind: TK, msg: &str) {
+        if self.check(kind) {
             self.advance();
             return;
         }
@@ -228,16 +231,16 @@ impl<'a> Compiler<'a> {
 
         // Emit the operator
         match operator {
-            TokenKind::Plus => self.emit_byte(OpCode::Add, line),
-            TokenKind::Minus => self.emit_byte(OpCode::Subtract, line),
-            TokenKind::Star => self.emit_byte(OpCode::Multiply, line),
-            TokenKind::Slash => self.emit_byte(OpCode::Divide, line),
-            TokenKind::BangEqual => self.emit_bytes(OpCode::Equal, OpCode::Not, line),
-            TokenKind::EqualEqual => self.emit_byte(OpCode::Equal, line),
-            TokenKind::Greater => self.emit_byte(OpCode::Greater, line),
-            TokenKind::GreaterEqual => self.emit_bytes(OpCode::Less, OpCode::Not, line),
-            TokenKind::Less => self.emit_byte(OpCode::Less, line),
-            TokenKind::LessEqual => self.emit_bytes(OpCode::Greater, OpCode::Not, line),
+            TK::Plus => self.emit_byte(OpCode::Add, line),
+            TK::Minus => self.emit_byte(OpCode::Subtract, line),
+            TK::Star => self.emit_byte(OpCode::Multiply, line),
+            TK::Slash => self.emit_byte(OpCode::Divide, line),
+            TK::BangEqual => self.emit_bytes(OpCode::Equal, OpCode::Not, line),
+            TK::EqualEqual => self.emit_byte(OpCode::Equal, line),
+            TK::Greater => self.emit_byte(OpCode::Greater, line),
+            TK::GreaterEqual => self.emit_bytes(OpCode::Less, OpCode::Not, line),
+            TK::Less => self.emit_byte(OpCode::Less, line),
+            TK::LessEqual => self.emit_bytes(OpCode::Greater, OpCode::Not, line),
 
             _ => unreachable!("unknown binary operator: {}", operator),
         }
@@ -245,16 +248,16 @@ impl<'a> Compiler<'a> {
 
     fn literal(&mut self) {
         match self.previous.as_ref().unwrap().kind {
-            TokenKind::False => self.emit_byte(OpCode::False, self.line()),
-            TokenKind::True => self.emit_byte(OpCode::True, self.line()),
-            TokenKind::Nil => self.emit_byte(OpCode::Nil, self.line()),
+            TK::False => self.emit_byte(OpCode::False, self.line()),
+            TK::True => self.emit_byte(OpCode::True, self.line()),
+            TK::Nil => self.emit_byte(OpCode::Nil, self.line()),
             _ => unreachable!("literal"),
         }
     }
 
     fn grouping(&mut self) {
         self.expression();
-        self.consume(TokenKind::RightParen, "Expect ')' after expression.");
+        self.consume(TK::RightParen, "Expect ')' after expression.");
     }
 
     fn number(&mut self) {
@@ -277,8 +280,8 @@ impl<'a> Compiler<'a> {
 
         // Emit the operator
         match operator {
-            TokenKind::Minus => self.emit_byte(OpCode::Negate, line),
-            TokenKind::Bang => self.emit_byte(OpCode::Not, line),
+            TK::Minus => self.emit_byte(OpCode::Negate, line),
+            TK::Bang => self.emit_byte(OpCode::Not, line),
             _ => unreachable!("unary but not negation: {}", operator),
         }
     }
@@ -318,7 +321,6 @@ impl<'a> Compiler<'a> {
         self.error_at(self.previous.clone(), msg);
     }
 
-    #[inline]
     fn error_at(&mut self, token: Option<Token>, msg: &str) {
         if self.panic_mode {
             return;
@@ -326,9 +328,9 @@ impl<'a> Compiler<'a> {
         self.panic_mode = true;
         if let Some(token) = token.as_ref() {
             eprint!("[line {}] Error", *token.line);
-            if token.kind == TokenKind::Eof {
+            if token.kind == TK::Eof {
                 eprint!(" at end");
-            } else if token.kind != TokenKind::Error {
+            } else if token.kind != TK::Error {
                 eprint!(" at '{}'", token.as_str())
             }
             eprintln!(": {}", msg);
@@ -340,7 +342,85 @@ impl<'a> Compiler<'a> {
         self.parse_precedence(Precedence::Assignment);
     }
 
-    fn get_rule(&self, operator: TokenKind) -> &Rule<'a> {
+    fn expression_statement(&mut self) {
+        let line = self.line();
+        self.expression();
+        self.consume(TK::Semicolon, "Expect ';' after expression.");
+        self.emit_byte(OpCode::Pop, line);
+    }
+
+    fn declaration(&mut self) {
+        self.statement();
+        if self.panic_mode {
+            self.synchronize();
+        }
+    }
+
+    fn statement(&mut self) {
+        if self.match_(TK::Print) {
+            self.print_statement();
+        } else {
+            self.expression_statement();
+        }
+    }
+
+    fn print_statement(&mut self) {
+        let line = self.line();
+        self.expression();
+        self.consume(TK::Semicolon, "Expect ';' after value.");
+        self.emit_byte(OpCode::Print, line);
+    }
+
+    fn synchronize(&mut self) {
+        self.panic_mode = false;
+
+        while !self.check(TK::Eof) {
+            if self.check_previous(TK::Semicolon) {
+                return;
+            }
+            if let Some(
+                TK::Class
+                | TK::Fun
+                | TK::Var
+                | TK::For
+                | TK::If
+                | TK::While
+                | TK::Print
+                | TK::Return,
+            ) = self.current_token_kind()
+            {
+                return;
+            }
+            self.advance();
+        }
+    }
+
+    fn match_(&mut self, kind: TK) -> bool {
+        if !self.check(kind) {
+            return false;
+        }
+        self.advance();
+        true
+    }
+
+    fn current_token_kind(&self) -> Option<TK> {
+        self.current.as_ref().map(|t| t.kind)
+    }
+
+    fn check(&self, kind: TK) -> bool {
+        self.current_token_kind()
+            .map(|k| k == kind)
+            .unwrap_or(false)
+    }
+
+    fn check_previous(&self, kind: TK) -> bool {
+        self.previous
+            .as_ref()
+            .map(|t| t.kind == kind)
+            .unwrap_or(false)
+    }
+
+    fn get_rule(&self, operator: TK) -> &Rule<'a> {
         &self.rules[operator as usize]
     }
 }

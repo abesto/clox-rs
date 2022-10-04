@@ -77,8 +77,13 @@ impl VM {
                 print!("{:?}", disassembler);
             }
             match OpCode::try_from(instruction).expect("Internal error: unrecognized opcode") {
+                OpCode::Print => {
+                    println!("{}", self.stack.pop().expect("stack underflow in OP_PRINT"));
+                }
+                OpCode::Pop => {
+                    self.stack.pop().expect("stack underflow in OP_POP");
+                }
                 OpCode::Return => {
-                    println!("{}", self.stack.pop().expect("stack underflow"));
                     return InterpretResult::Ok;
                 }
                 OpCode::Constant => {
