@@ -226,7 +226,7 @@ impl<'a> Compiler<'a> {
         let rule = self.get_rule(operator);
 
         self.parse_precedence(
-            Precedence::try_from_primitive(u8::from(rule.precedence) + 1).unwrap(),
+            Precedence::try_from_primitive(u8::from(rule.precedence) - 1).unwrap(),
         );
 
         // Emit the operator
