@@ -62,7 +62,7 @@ macro_rules! make_rules {
 
 type Rules<'a> = [Rule<'a>; 42];
 
-// Can't be static because the associated function types include lifetimes
+// Can't be a static value because the associated function types include lifetimes
 #[rustfmt::skip]
 fn make_rules<'a>() -> Rules<'a> {
     make_rules!(
@@ -79,31 +79,31 @@ fn make_rules<'a>() -> Rules<'a> {
         Semicolon    = [None,     None,   None],
         Slash        = [None,     binary, Factor],
         Star         = [None,     binary, Factor],
-        Bang         = [None,     None,   None],
-        BangEqual    = [None,     None,   None],
+        Bang         = [unary,    None,   None],
+        BangEqual    = [None,     binary, Equality],
         Equal        = [None,     None,   None],
-        EqualEqual   = [None,     None,   None],
-        Greater      = [None,     None,   None],
-        GreaterEqual = [None,     None,   None],
-        Less         = [None,     None,   None],
-        LessEqual    = [None,     None,   None],
+        EqualEqual   = [None,     binary, Equality],
+        Greater      = [None,     binary, Comparison],
+        GreaterEqual = [None,     binary, Comparison],
+        Less         = [None,     binary, Comparison],
+        LessEqual    = [None,     binary, Comparison],
         Identifier   = [None,     None,   None],
         String       = [None,     None,   None],
         Number       = [number,   None,   None],
         And          = [None,     None,   None],
         Class        = [None,     None,   None],
         Else         = [None,     None,   None],
-        False        = [None,     None,   None],
+        False        = [literal,  None,   None],
         For          = [None,     None,   None],
         Fun          = [None,     None,   None],
         If           = [None,     None,   None],
-        Nil          = [None,     None,   None],
+        Nil          = [literal,  None,   None],
         Or           = [None,     None,   None],
         Print        = [None,     None,   None],
         Return       = [None,     None,   None],
         Super        = [None,     None,   None],
         This         = [None,     None,   None],
-        True         = [None,     None,   None],
+        True         = [literal,  None,   None],
         Var          = [None,     None,   None],
         While        = [None,     None,   None],
         Error        = [None,     None,   None],
@@ -199,8 +199,11 @@ impl<'a> Compiler<'a> {
         self.emit_byte(OpCode::Return, self.line());
     }
 
-    fn emit_constant(&mut self, value: Value) {
-        if !self.chunk.write_constant(value, self.line()) {
+    fn emit_constant<T>(&mut self, value: T)
+    where
+        T: Into<Value>,
+    {
+        if !self.chunk.write_constant(value.into(), self.line()) {
             self.error("Too many constants in one chunk.");
         }
     }
@@ -229,7 +232,23 @@ impl<'a> Compiler<'a> {
             TokenKind::Minus => self.emit_byte(OpCode::Subtract, line),
             TokenKind::Star => self.emit_byte(OpCode::Multiply, line),
             TokenKind::Slash => self.emit_byte(OpCode::Divide, line),
+            TokenKind::BangEqual => self.emit_bytes(OpCode::Equal, OpCode::Not, line),
+            TokenKind::EqualEqual => self.emit_byte(OpCode::Equal, line),
+            TokenKind::Greater => self.emit_byte(OpCode::Greater, line),
+            TokenKind::GreaterEqual => self.emit_bytes(OpCode::Less, OpCode::Not, line),
+            TokenKind::Less => self.emit_byte(OpCode::Less, line),
+            TokenKind::LessEqual => self.emit_bytes(OpCode::Greater, OpCode::Not, line),
+
             _ => unreachable!("unknown binary operator: {}", operator),
+        }
+    }
+
+    fn literal(&mut self) {
+        match self.previous.as_ref().unwrap().kind {
+            TokenKind::False => self.emit_byte(OpCode::False, self.line()),
+            TokenKind::True => self.emit_byte(OpCode::True, self.line()),
+            TokenKind::Nil => self.emit_byte(OpCode::Nil, self.line()),
+            _ => unreachable!("literal"),
         }
     }
 
@@ -253,6 +272,7 @@ impl<'a> Compiler<'a> {
         // Emit the operator
         match operator {
             TokenKind::Minus => self.emit_byte(OpCode::Negate, line),
+            TokenKind::Bang => self.emit_byte(OpCode::Not, line),
             _ => unreachable!("unary but not negation: {}", operator),
         }
     }

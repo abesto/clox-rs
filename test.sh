@@ -4,4 +4,4 @@ set -euo pipefail
 
 cargo build
 cd ../craftinginterpreters
-dart ./tool/bin/test.dart clox chap15_virtual --interpreter ../clox-rs/target/debug/clox-rs
+dart ./tool/bin/test.dart clox chap18_types --interpreter ../clox-rs/target/debug/clox-rs

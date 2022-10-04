@@ -5,13 +5,21 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * `debug.rs`: implemented the `disassemble*` functions as `impl Debug for Chunk`. An implication of this is that all `Chunk`s store a `name`, which is probably a good idea anyway.
   * `Debug` for specific instructions is implemented with a helper struct `InstructionDisassembler` that wraps a `Chunk` reference and an offset. This also allows fully consistent formatting from `Chunk::debug` and execution tracing.
   * `(int)(vm.ip - vm.chunk->code)` has no translation into Rust. I tried making `VM::ip` an iterator over `(code_offset, instruction)`, but that leads to lifetime nightmares. For now we go with a simple index here.
+  * Serialization of the opcodes is exactly as seen in the C version, even though the specific strings don't actually map exactly to our code (i.e. `OP_NIL` instead of `OpCode::Nil`). This is to stay compatible with the books output; plus, I like the aesthetic!
 * `#define`-controlled features translate to Cargo features
 * `VM::binary_op` is a higher-order function instead of a macro; hopefully this will be good enough later on.
 * `Token`s store the "pointer" to the lexeme as a slice.
 * Unlike [`jlox-rs`](https://github.com/abesto/jlox-rs/), error reporting on initial implementation follows closely the error reporting logic of the book so that I have less to mentally juggle. Might end up refactoring afterwards to use `Result`s.
 * `Scanner`: the `start` / `current` pointer pair is implemented with indices and slices. Using iterators *may* be more performant, and there may be a way to do that, but timed out on it for now.
-* My `Compiler::emit_byte` takes the line number as argument for correct error reporting (See the sidebar in 17.4.3 of the book)
+* `Compiler::emit_byte` takes the line number as argument for correct error reporting (See the sidebar in 17.4.3 of the book)
 * The Pratt parser table creation is a bit of a mess due to 1. constraints on array initialization and 2. lifetimes. We create a new instance of the table for each `Compiler` instance, because the compiler instance has a lifetime, and its associated methods capture that lifetime, and so the function references must also capture that same lifetime.
+* There's a lot of `self.previous.as_ref().unwrap()` in `Compiler`. There should be a way to get rid of those `Option`s. I think.
+
+# TODO
+
+Stuff I want to do, but postponing to see if it's covered in the book
+
+* Drop the VM stack after we're done interpreting a piece of code. In the REPL, stuff can stay there after runtime errors.
 
 # Challenges
 
@@ -19,10 +27,11 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * `OpCode::ConstantLong` / `OP_CONSTANT_LONG`: support for more than 256 constants
 * Optimized negation to mutate the stack value in place, for about a 1.22x speedup. Also did the same for binary operations; strangely, addition (the only one I tested) only sped up by about 1.02x, if that (significant of noise on the measurement).
 * TODO ternary operator
+* STRETCH: add error handling to user code
 
 # Dependencies
 
 * `num_enum`: More safely and conveniently convert between the `u8` of byte-code and `OpCode`s
-* `shrinkwraprs`: We use `u8` / `usize` for a ton of different meanings. Would be good to not mix them up. This helps with that.
+* `shrinkwraprs`: We use `u8` / `usize` for a ton of different meanings. Would be good to not mix them up. This helps with that. Currently only really used by `chunk.rs`.
   * If used incorrectly it'll likely have a pretty bad performance impact, but: first make it correct, then make it fast.
   * It also leads to a fair bit of `.as_ref()` noise, but... maybe it's still worth it? Let's see.

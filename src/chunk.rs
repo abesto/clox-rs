@@ -18,6 +18,13 @@ pub struct ConstantLongIndex(pub usize);
 pub enum OpCode {
     Constant,
     ConstantLong,
+    Nil,
+    True,
+    False,
+
+    Equal,
+    Greater,
+    Less,
 
     Negate,
 
@@ -25,6 +32,7 @@ pub enum OpCode {
     Subtract,
     Multiply,
     Divide,
+    Not,
 
     Return,
 }
@@ -36,7 +44,8 @@ impl OpCode {
         match self {
             Constant => 2,
             ConstantLong => 4,
-            Negate | Add | Subtract | Multiply | Divide | Return => 1,
+            Negate | Add | Subtract | Multiply | Divide | Return | Nil | True | False | Not
+            | Equal | Greater | Less => 1,
         }
     }
 }
@@ -65,11 +74,11 @@ impl Chunk {
         &self.code
     }
 
-    pub fn get_constant<T>(&self, index: T) -> Value
+    pub fn get_constant<T>(&self, index: T) -> &Value
     where
         T: Into<usize>,
     {
-        self.constants[index.into()]
+        &self.constants[index.into()]
     }
 
     pub fn write<T>(&mut self, what: T, line: Line)
@@ -101,7 +110,7 @@ impl Chunk {
             self.write(c, line);
             self.write(d, line);
         }
-        return true;
+        true
     }
 }
 
@@ -196,19 +205,26 @@ impl<'a> std::fmt::Debug for InstructionDisassembler<'a> {
         {
             OpCode::Constant => self.debug_constant_opcode(f, "OP_CONSTANT", offset),
             OpCode::ConstantLong => self.debug_constant_long_opcode(f, "OP_CONSTANT_LONG", offset),
+            OpCode::Nil => self.debug_simple_opcode(f, "OP_NIL"),
+            OpCode::True => self.debug_simple_opcode(f, "OP_TRUE"),
+            OpCode::False => self.debug_simple_opcode(f, "OP_FALSE"),
             OpCode::Return => self.debug_simple_opcode(f, "OP_RETURN"),
             OpCode::Negate => self.debug_simple_opcode(f, "OP_NEGATE"),
             OpCode::Add => self.debug_simple_opcode(f, "OP_ADD"),
             OpCode::Subtract => self.debug_simple_opcode(f, "OP_SUBTRACT"),
             OpCode::Multiply => self.debug_simple_opcode(f, "OP_MULTIPLY"),
             OpCode::Divide => self.debug_simple_opcode(f, "OP_DIVIDE"),
+            OpCode::Not => self.debug_simple_opcode(f, "OP_NOT"),
+            OpCode::Equal => self.debug_simple_opcode(f, "OP_EQUAL"),
+            OpCode::Greater => self.debug_simple_opcode(f, "OP_GREATER"),
+            OpCode::Less => self.debug_simple_opcode(f, "OP_LESS"),
         }?;
         Ok(())
     }
 }
 
 impl Chunk {
-    fn get_line(&self, offset: &CodeOffset) -> Line {
+    pub fn get_line(&self, offset: &CodeOffset) -> Line {
         let mut iter = self.lines.iter();
         let (mut consumed, mut line) = iter.next().unwrap();
         while consumed < *offset.as_ref() {
