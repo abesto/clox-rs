@@ -1,7 +1,7 @@
 CRAFTING_INTERPRETERS ?= ../craftinginterpreters
 DEBUG_BIN := target/debug/clox-rs
 
-test_level := chap19_strings
+test_level := chap21_global
 sources := src/*.rs Cargo.toml
 
 $(DEBUG_BIN): $(sources)
@@ -15,7 +15,7 @@ cargo-test:
 craftinginterpreters-test: $(DEBUG_BIN)
 	$(eval home := $(shell pwd))
 	cd $(CRAFTING_INTERPRETERS) && \
-		dart tool/bin/test.dart jlox $(test_level) --interpreter $(home)/$(DEBUG_BIN)
+		dart tool/bin/test.dart $(test_level) --interpreter $(home)/$(DEBUG_BIN)
 
 .PHONY: test
 test: cargo-test craftinginterpreters-test

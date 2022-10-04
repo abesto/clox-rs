@@ -65,7 +65,7 @@ impl std::fmt::Display for TokenKind {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Token<'a> {
     pub kind: TokenKind,
     pub lexeme: &'a [u8],
@@ -188,7 +188,7 @@ impl<'a> Scanner<'a> {
                 // Line comment
                 Some(b'/') => {
                     if self.peek_next() == Some(&b'/') {
-                        while let Some(b'\n') | None = self.peek() {
+                        while !matches!(self.peek(), Some(b'\n') | None) {
                             self.advance();
                         }
                     } else {

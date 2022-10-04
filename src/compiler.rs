@@ -23,7 +23,7 @@ enum Precedence {
     Primary,
 }
 
-type ParseFn<'a> = fn(&mut Compiler<'a>) -> ();
+type ParseFn<'a> = fn(&mut Compiler<'a>, bool) -> ();
 
 struct Rule<'a> {
     prefix: Option<ParseFn<'a>>,
@@ -182,24 +182,25 @@ impl<'a> Compiler<'a> {
         self.previous.as_ref().unwrap().line
     }
 
-    fn emit_byte<T>(&mut self, byte: T, line: Line)
+    fn emit_byte<T>(&mut self, byte: T)
     where
         T: Into<u8>,
     {
+        let line = self.line();
         self.current_chunk().write(byte, line)
     }
 
-    fn emit_bytes<T1, T2>(&mut self, byte1: T1, byte2: T2, line: Line)
+    fn emit_bytes<T1, T2>(&mut self, byte1: T1, byte2: T2)
     where
         T1: Into<u8>,
         T2: Into<u8>,
     {
-        self.emit_byte(byte1, line);
-        self.emit_byte(byte2, line);
+        self.emit_byte(byte1);
+        self.emit_byte(byte2);
     }
 
     fn emit_return(&mut self) {
-        self.emit_byte(OpCode::Return, self.line());
+        self.emit_byte(OpCode::Return);
     }
 
     fn emit_constant<T>(&mut self, value: T)
@@ -220,9 +221,8 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn binary(&mut self) {
+    fn binary(&mut self, _can_assign: bool) {
         let operator = self.previous.as_ref().unwrap().kind;
-        let line = self.line();
         let rule = self.get_rule(operator);
 
         self.parse_precedence(
@@ -231,69 +231,78 @@ impl<'a> Compiler<'a> {
 
         // Emit the operator
         match operator {
-            TK::Plus => self.emit_byte(OpCode::Add, line),
-            TK::Minus => self.emit_byte(OpCode::Subtract, line),
-            TK::Star => self.emit_byte(OpCode::Multiply, line),
-            TK::Slash => self.emit_byte(OpCode::Divide, line),
-            TK::BangEqual => self.emit_bytes(OpCode::Equal, OpCode::Not, line),
-            TK::EqualEqual => self.emit_byte(OpCode::Equal, line),
-            TK::Greater => self.emit_byte(OpCode::Greater, line),
-            TK::GreaterEqual => self.emit_bytes(OpCode::Less, OpCode::Not, line),
-            TK::Less => self.emit_byte(OpCode::Less, line),
-            TK::LessEqual => self.emit_bytes(OpCode::Greater, OpCode::Not, line),
+            TK::Plus => self.emit_byte(OpCode::Add),
+            TK::Minus => self.emit_byte(OpCode::Subtract),
+            TK::Star => self.emit_byte(OpCode::Multiply),
+            TK::Slash => self.emit_byte(OpCode::Divide),
+            TK::BangEqual => self.emit_bytes(OpCode::Equal, OpCode::Not),
+            TK::EqualEqual => self.emit_byte(OpCode::Equal),
+            TK::Greater => self.emit_byte(OpCode::Greater),
+            TK::GreaterEqual => self.emit_bytes(OpCode::Less, OpCode::Not),
+            TK::Less => self.emit_byte(OpCode::Less),
+            TK::LessEqual => self.emit_bytes(OpCode::Greater, OpCode::Not),
 
             _ => unreachable!("unknown binary operator: {}", operator),
         }
     }
 
-    fn literal(&mut self) {
+    fn literal(&mut self, _can_assign: bool) {
         match self.previous.as_ref().unwrap().kind {
-            TK::False => self.emit_byte(OpCode::False, self.line()),
-            TK::True => self.emit_byte(OpCode::True, self.line()),
-            TK::Nil => self.emit_byte(OpCode::Nil, self.line()),
+            TK::False => self.emit_byte(OpCode::False),
+            TK::True => self.emit_byte(OpCode::True),
+            TK::Nil => self.emit_byte(OpCode::Nil),
             _ => unreachable!("literal"),
         }
     }
 
-    fn grouping(&mut self) {
+    fn grouping(&mut self, _can_assign: bool) {
         self.expression();
         self.consume(TK::RightParen, "Expect ')' after expression.");
     }
 
-    fn number(&mut self) {
+    fn number(&mut self, _can_assign: bool) {
         let value: f64 = self.previous.as_ref().unwrap().as_str().parse().unwrap();
         self.emit_constant(value);
     }
 
-    fn string(&mut self) {
+    fn string(&mut self, _can_assign: bool) {
         let lexeme = self.previous.as_ref().unwrap().as_str();
         let value = lexeme[1..lexeme.len() - 1].to_string();
         self.emit_constant(value);
     }
 
-    fn variable(&mut self) {
-        self.named_variable(self.previous.as_ref().unwrap().as_str().to_string());
+    fn variable(&mut self, can_assign: bool) {
+        self.named_variable(
+            self.previous.as_ref().unwrap().as_str().to_string(),
+            can_assign,
+        );
     }
 
-    fn named_variable<S>(&mut self, name: S)
+    fn named_variable<S>(&mut self, name: S, can_assign: bool)
     where
         S: ToString,
     {
         let arg = self.identifier_constant(name);
-        self.emit_bytes(OpCode::GetGlobal, u8::try_from(*arg).unwrap(), self.line());
+        let arg = u8::try_from(*arg).unwrap();
+
+        if can_assign && self.match_(TK::Equal) {
+            self.expression();
+            self.emit_bytes(OpCode::SetGlobal, arg);
+        } else {
+            self.emit_bytes(OpCode::GetGlobal, arg);
+        }
     }
 
-    fn unary(&mut self) {
+    fn unary(&mut self, _can_assign: bool) {
         let operator = self.previous.as_ref().unwrap().kind;
-        let line = self.line();
 
         // Compile the operand
         self.parse_precedence(Precedence::Unary);
 
         // Emit the operator
         match operator {
-            TK::Minus => self.emit_byte(OpCode::Negate, line),
-            TK::Bang => self.emit_byte(OpCode::Not, line),
+            TK::Minus => self.emit_byte(OpCode::Negate),
+            TK::Bang => self.emit_byte(OpCode::Not),
             _ => unreachable!("unary but not negation: {}", operator),
         }
     }
@@ -301,7 +310,8 @@ impl<'a> Compiler<'a> {
     fn parse_precedence(&mut self, precedence: Precedence) {
         self.advance();
         if let Some(prefix_rule) = self.get_rule(self.previous.as_ref().unwrap().kind).prefix {
-            prefix_rule(self);
+            let can_assign = precedence <= Precedence::Assignment;
+            prefix_rule(self, can_assign);
 
             while precedence
                 < self
@@ -313,10 +323,14 @@ impl<'a> Compiler<'a> {
                     .get_rule(self.previous.as_ref().unwrap().kind)
                     .infix
                     .unwrap();
-                infix_rule(self);
+                infix_rule(self, can_assign);
+            }
+
+            if can_assign && self.match_(TK::Equal) {
+                self.error("Invalid assignment target.");
             }
         } else {
-            self.error("Expected expression.");
+            self.error("Expect expression.");
         }
     }
 
@@ -334,7 +348,7 @@ impl<'a> Compiler<'a> {
 
     fn define_variable(&mut self, global: ConstantLongIndex) {
         if let Ok(short) = u8::try_from(*global) {
-            self.emit_bytes(OpCode::DefineGlobal, short, self.line());
+            self.emit_bytes(OpCode::DefineGlobal, short);
         } else {
             self.error("Too many globals!")
         }
@@ -380,7 +394,7 @@ impl<'a> Compiler<'a> {
         if self.match_(TK::Equal) {
             self.expression();
         } else {
-            self.emit_byte(OpCode::Nil, self.line());
+            self.emit_byte(OpCode::Nil);
         }
         self.consume(TK::Semicolon, "Expect ';' after variable declaration.");
 
@@ -388,10 +402,9 @@ impl<'a> Compiler<'a> {
     }
 
     fn expression_statement(&mut self) {
-        let line = self.line();
         self.expression();
         self.consume(TK::Semicolon, "Expect ';' after expression.");
-        self.emit_byte(OpCode::Pop, line);
+        self.emit_byte(OpCode::Pop);
     }
 
     fn declaration(&mut self) {
@@ -415,10 +428,9 @@ impl<'a> Compiler<'a> {
     }
 
     fn print_statement(&mut self) {
-        let line = self.line();
         self.expression();
         self.consume(TK::Semicolon, "Expect ';' after value.");
-        self.emit_byte(OpCode::Print, line);
+        self.emit_byte(OpCode::Print);
     }
 
     fn synchronize(&mut self) {
@@ -460,7 +472,7 @@ impl<'a> Compiler<'a> {
     fn check(&self, kind: TK) -> bool {
         self.current_token_kind()
             .map(|k| k == kind)
-            .unwrap_or(false)
+            .unwrap_or_else(|| false)
     }
 
     fn check_previous(&self, kind: TK) -> bool {

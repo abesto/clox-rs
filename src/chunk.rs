@@ -18,8 +18,10 @@ pub struct ConstantLongIndex(pub usize);
 pub enum OpCode {
     Constant,
     ConstantLong,
+
     DefineGlobal,
     GetGlobal,
+    SetGlobal,
 
     Nil,
     True,
@@ -50,7 +52,7 @@ impl OpCode {
             Constant => 2,
             ConstantLong => 4,
             Negate | Add | Subtract | Multiply | Divide | Return | Nil | True | False | Not
-            | Equal | Greater | Less | Print | Pop | DefineGlobal | GetGlobal => 1,
+            | Equal | Greater | Less | Print | Pop | DefineGlobal | GetGlobal | SetGlobal => 1,
         }
     }
 }
@@ -231,6 +233,7 @@ impl<'a> std::fmt::Debug for InstructionDisassembler<'a> {
             OpCode::Pop => self.debug_simple_opcode(f, "OP_POP"),
             OpCode::DefineGlobal => self.debug_simple_opcode(f, "OP_DEFINE_GLOBAL"),
             OpCode::GetGlobal => self.debug_simple_opcode(f, "OP_GET_GLOBAL"),
+            OpCode::SetGlobal => self.debug_simple_opcode(f, "OP_SET_GLOBAL"),
         }?;
         Ok(())
     }

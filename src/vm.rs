@@ -100,6 +100,29 @@ impl VM {
                         x
                     ),
                 },
+                OpCode::SetGlobal => match self.read_constant(false).clone() {
+                    Value::String(name) => {
+                        if self
+                            .globals
+                            .insert(
+                                *name.clone(),
+                                self.stack
+                                    .last()
+                                    .expect("stack underflow in OP_SET_GLOBAL")
+                                    .clone(),
+                            )
+                            .is_none()
+                        {
+                            self.globals.remove(name.as_ref());
+                            runtime_error!(self, "Undefined variable '{}'.", name);
+                            return InterpretResult::RuntimeError;
+                        }
+                    }
+                    x => panic!(
+                        "Internal error: non-string operand to OP_SET_GLOBAL: {:?}",
+                        x
+                    ),
+                },
                 OpCode::DefineGlobal => match self.read_constant(false).clone() {
                     Value::String(name) => {
                         self.globals.insert(

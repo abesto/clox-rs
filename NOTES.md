@@ -11,7 +11,6 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * `Token`s store the "pointer" to the lexeme as a slice.
 * Unlike [`jlox-rs`](https://github.com/abesto/jlox-rs/), error reporting on initial implementation follows closely the error reporting logic of the book so that I have less to mentally juggle. Might end up refactoring afterwards to use `Result`s.
 * `Scanner`: the `start` / `current` pointer pair is implemented with indices and slices. Using iterators *may* be more performant, and there may be a way to do that, but timed out on it for now.
-* `Compiler::emit_byte` takes the line number as argument for correct error reporting (See the sidebar in 17.4.3 of the book)
 * The Pratt parser table creation is a bit of a mess due to 1. constraints on array initialization and 2. lifetimes. We create a new instance of the table for each `Compiler` instance, because the compiler instance has a lifetime, and its associated methods capture that lifetime, and so the function references must also capture that same lifetime.
 * There's a lot of `self.previous.as_ref().unwrap()` in `Compiler`. There should be a way to get rid of those `Option`s. I think.
 * By chapter 19, the book is making a lot of forward references to a garbage collector. While that sounds exciting, I think... we won't... need it? Because the Rust memory management structures we use (basically, `Box` / `String` + `Drop`) ensure we never leak memory? Except, this will probably get a ton more complicated the moment we start in on variables and classes. Let's see what happens.
@@ -20,7 +19,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 # TODO
 
 * Drop the VM stack after we're done interpreting a piece of code. In the REPL, stuff can stay there after runtime errors.
-* Add `OpCode::DefineGlobalLong` & `OpCode::GetGlobalLong` to the tune of `OpCode::ConstantLong`
+* Add `OpCode::DefineGlobalLong` & `OpCode::GetGlobalLong` & `OpCode::SetGlobalLong` to the tune of `OpCode::ConstantLong`. Maybe this can all be abstracted away somehow nicely?
 
 # Challenges
 
