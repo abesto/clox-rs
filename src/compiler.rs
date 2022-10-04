@@ -87,7 +87,7 @@ fn make_rules<'a>() -> Rules<'a> {
         GreaterEqual = [None,     binary, Comparison],
         Less         = [None,     binary, Comparison],
         LessEqual    = [None,     binary, Comparison],
-        Identifier   = [None,     None,   None],
+        Identifier   = [variable, None,   None],
         String       = [string,   None,   None],
         Number       = [number,   None,   None],
         And          = [None,     None,   None],
@@ -269,6 +269,18 @@ impl<'a> Compiler<'a> {
         let lexeme = self.previous.as_ref().unwrap().as_str();
         let value = lexeme[1..lexeme.len() - 1].to_string();
         self.emit_constant(value);
+    }
+
+    fn variable(&mut self) {
+        self.named_variable(self.previous.as_ref().unwrap().as_str().to_string());
+    }
+
+    fn named_variable<S>(&mut self, name: S)
+    where
+        S: ToString,
+    {
+        let arg = self.identifier_constant(name);
+        self.emit_bytes(OpCode::GetGlobal, u8::try_from(*arg).unwrap(), self.line());
     }
 
     fn unary(&mut self) {

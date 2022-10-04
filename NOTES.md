@@ -20,7 +20,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 # TODO
 
 * Drop the VM stack after we're done interpreting a piece of code. In the REPL, stuff can stay there after runtime errors.
-* Add `OpCode::DefineGlobalLong` to the tune of `OpCode::ConstantLong`
+* Add `OpCode::DefineGlobalLong` & `OpCode::GetGlobalLong` to the tune of `OpCode::ConstantLong`
 
 # Challenges
 

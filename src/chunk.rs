@@ -19,6 +19,7 @@ pub enum OpCode {
     Constant,
     ConstantLong,
     DefineGlobal,
+    GetGlobal,
 
     Nil,
     True,
@@ -49,7 +50,7 @@ impl OpCode {
             Constant => 2,
             ConstantLong => 4,
             Negate | Add | Subtract | Multiply | Divide | Return | Nil | True | False | Not
-            | Equal | Greater | Less | Print | Pop | DefineGlobal => 1,
+            | Equal | Greater | Less | Print | Pop | DefineGlobal | GetGlobal => 1,
         }
     }
 }
@@ -229,6 +230,7 @@ impl<'a> std::fmt::Debug for InstructionDisassembler<'a> {
             OpCode::Print => self.debug_simple_opcode(f, "OP_PRINT"),
             OpCode::Pop => self.debug_simple_opcode(f, "OP_POP"),
             OpCode::DefineGlobal => self.debug_simple_opcode(f, "OP_DEFINE_GLOBAL"),
+            OpCode::GetGlobal => self.debug_simple_opcode(f, "OP_GET_GLOBAL"),
         }?;
         Ok(())
     }

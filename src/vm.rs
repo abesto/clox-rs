@@ -87,25 +87,35 @@ impl VM {
                 OpCode::Pop => {
                     self.stack.pop().expect("stack underflow in OP_POP");
                 }
-                OpCode::DefineGlobal => {
-                    let name_value = self.read_constant(false).clone();
-                    match name_value {
-                        Value::String(name) => {
-                            self.globals.insert(
-                                *name,
-                                self.stack
-                                    .last()
-                                    .expect("stack underflow in OP_DEFINE_GLOBAL")
-                                    .clone(),
-                            );
-                            self.stack.pop();
+                OpCode::GetGlobal => match self.read_constant(false).clone() {
+                    Value::String(name) => match self.globals.get(&*name) {
+                        Some(value) => self.stack.push(value.clone()),
+                        None => {
+                            runtime_error!(self, "Undefined variable '{}'.", name);
+                            return InterpretResult::RuntimeError;
                         }
-                        x => panic!(
-                            "Internal error: non-string operand to OP_DEFINE_GLOBAL: {:?}",
-                            x
-                        ),
+                    },
+                    x => panic!(
+                        "Internal error: non-string operand to OP_GET_GLOBAL: {:?}",
+                        x
+                    ),
+                },
+                OpCode::DefineGlobal => match self.read_constant(false).clone() {
+                    Value::String(name) => {
+                        self.globals.insert(
+                            *name,
+                            self.stack
+                                .last()
+                                .expect("stack underflow in OP_DEFINE_GLOBAL")
+                                .clone(),
+                        );
+                        self.stack.pop();
                     }
-                }
+                    x => panic!(
+                        "Internal error: non-string operand to OP_DEFINE_GLOBAL: {:?}",
+                        x
+                    ),
+                },
                 OpCode::Return => {
                     return InterpretResult::Ok;
                 }
