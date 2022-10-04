@@ -39,3 +39,9 @@ impl Value {
         }
     }
 }
+
+#[cfg(test)]
+#[test]
+fn value_size() {
+    assert_eq!(16, std::mem::size_of::<Value>());
+}
