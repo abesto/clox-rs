@@ -113,6 +113,11 @@ fn make_rules<'a>() -> Rules<'a> {
     )
 }
 
+struct Local<'a> {
+    name: Token<'a>,
+    depth: usize,
+}
+
 pub struct Compiler<'a> {
     scanner: Scanner<'a>,
     previous: Option<Token<'a>>,
@@ -120,8 +125,10 @@ pub struct Compiler<'a> {
     had_error: bool,
     panic_mode: bool,
     chunk: Chunk,
-    globals_by_name: HashMap<String, ConstantLongIndex>, // Watch out; manage this together with `self.chunk`
+    globals_by_name: HashMap<String, ConstantLongIndex>,
     rules: Rules<'a>,
+    locals: Vec<Local<'a>>,
+    scope_depth: u8,
 }
 
 impl<'a> Compiler<'a> {
@@ -136,6 +143,8 @@ impl<'a> Compiler<'a> {
             had_error: false,
             panic_mode: false,
             rules: make_rules(),
+            locals: Vec::new(),
+            scope_depth: 0,
         }
     }
 
