@@ -317,26 +317,38 @@ impl<'a> Compiler<'a> {
     where
         S: ToString,
     {
-        let arg = self.identifier_constant(name);
-        let arg = *arg;
-        let short_arg = u8::try_from(arg);
-        let is_long = short_arg.is_err();
+        let local_index = self.resolve_local(name.to_string());
+        let global_index = if local_index.is_some() {
+            None
+        } else {
+            Some(*self.identifier_constant(name))
+        };
 
         let op = if can_assign && self.match_(TK::Equal) {
             self.expression();
-            if is_long {
-                OpCode::SetGlobalLong
+            if let Some(global_index) = global_index {
+                if global_index > u8::MAX.into() {
+                    OpCode::SetGlobalLong
+                } else {
+                    OpCode::SetGlobal
+                }
             } else {
-                OpCode::SetGlobal
+                OpCode::SetLocal
             }
-        } else if is_long {
-            OpCode::GetGlobalLong
+        } else if let Some(global_index) = global_index {
+            if global_index > u8::MAX.into() {
+                OpCode::GetGlobalLong
+            } else {
+                OpCode::GetGlobal
+            }
         } else {
-            OpCode::GetGlobal
+            OpCode::GetLocal
         };
+
         self.emit_byte(op.clone());
 
-        if let Ok(short_arg) = short_arg {
+        let arg = local_index.map(usize::from).or(global_index).unwrap();
+        if let Ok(short_arg) = u8::try_from(arg) {
             self.emit_byte(short_arg);
         } else if !self.emit_24bit_number(arg) {
             self.error(&format!("Too many globals in {:?}", op));
@@ -398,15 +410,37 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    fn resolve_local<S>(&mut self, name: S) -> Option<usize>
+    where
+        S: ToString,
+    {
+        let name_string = name.to_string();
+        let name = name_string.as_bytes();
+        let retval = self
+            .locals
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, local)| local.name.lexeme == name)
+            .map(|(index, local)| {
+                if local.depth == -1 {
+                    self.locals.len()
+                } else {
+                    index
+                }
+            });
+        if retval == Some(self.locals.len()) {
+            self.error("Can't read local variable in its own initializer.");
+        }
+        retval
+    }
+
     fn add_local(&mut self, name: Token<'a>) {
         if self.locals.len() > usize::from(u8::MAX) + 1 {
             self.error("Too many local variables in function.");
             return;
         }
-        self.locals.push(Local {
-            name,
-            depth: self.scope_depth,
-        });
+        self.locals.push(Local { name, depth: -1 });
     }
 
     fn declare_variable(&mut self) {
@@ -439,10 +473,19 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn define_variable(&mut self, global: ConstantLongIndex) {
-        if self.scope_depth > 0 {
+    fn mark_initialized(&mut self) {
+        if let Some(local) = self.locals.last_mut() {
+            local.depth = self.scope_depth;
+        }
+    }
+
+    fn define_variable(&mut self, global: Option<ConstantLongIndex>) {
+        if global.is_none() {
+            assert!(self.scope_depth > 0);
+            self.mark_initialized();
             return;
         }
+        let global = global.unwrap();
 
         if let Ok(short) = u8::try_from(*global) {
             self.emit_bytes(OpCode::DefineGlobal, short);
@@ -505,9 +548,7 @@ impl<'a> Compiler<'a> {
         }
         self.consume(TK::Semicolon, "Expect ';' after variable declaration.");
 
-        if let Some(global) = global {
-            self.define_variable(global);
-        }
+        self.define_variable(global);
     }
 
     fn expression_statement(&mut self) {

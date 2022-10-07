@@ -87,6 +87,19 @@ impl VM {
                 OpCode::Pop => {
                     self.stack.pop().expect("stack underflow in OP_POP");
                 }
+                OpCode::GetLocal => {
+                    let slot = self.read_byte("Internal error: missing operand for OP_GET_LOCAL");
+                    let value = self.stack[usize::from(slot)].clone();
+                    self.stack.push(value);
+                }
+                OpCode::SetLocal => {
+                    let slot = self.read_byte("Internal error: missing operand for OP_SET_LOCAL");
+                    self.stack[usize::from(slot)] = self
+                        .stack
+                        .last()
+                        .expect("stack underflow in OP_SET_LOCAL")
+                        .clone();
+                }
                 op @ (OpCode::GetGlobal | OpCode::GetGlobalLong) => {
                     match self.read_constant(op == OpCode::GetGlobalLong).clone() {
                         Value::String(name) => match self.globals.get(&*name) {

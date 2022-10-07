@@ -27,6 +27,9 @@ pub enum OpCode {
     SetGlobal,
     SetGlobalLong,
 
+    GetLocal,
+    SetLocal,
+
     Nil,
     True,
     False,
@@ -53,11 +56,10 @@ impl OpCode {
     pub fn instruction_len(&self) -> usize {
         use OpCode::*;
         match self {
-            Constant => 2,
-            ConstantLong => 4,
+            Constant | GetLocal | SetLocal | GetGlobal | SetGlobal | DefineGlobal => 2,
+            ConstantLong | GetGlobalLong | SetGlobalLong | DefineGlobalLong => 4,
             Negate | Add | Subtract | Multiply | Divide | Return | Nil | True | False | Not
-            | Equal | Greater | Less | Print | Pop | DefineGlobal | GetGlobal | SetGlobal
-            | DefineGlobalLong | SetGlobalLong | GetGlobalLong => 1,
+            | Equal | Greater | Less | Print | Pop => 1,
         }
     }
 }
@@ -210,6 +212,16 @@ impl<'a> InstructionDisassembler<'a> {
     ) -> std::fmt::Result {
         writeln!(f, "{}", name)
     }
+
+    fn debug_byte_opcode(
+        &self,
+        f: &mut std::fmt::Formatter,
+        name: &str,
+        offset: &CodeOffset,
+    ) -> std::fmt::Result {
+        let slot = self.chunk.code[**offset + 1];
+        writeln!(f, "{:-16} {:>4}", name, slot)
+    }
 }
 
 macro_rules! disassemble {
@@ -256,6 +268,7 @@ impl<'a> std::fmt::Debug for InstructionDisassembler<'a> {
             opcode,
             constant(Constant),
             constant_long(ConstantLong),
+            byte(GetLocal, SetLocal),
             simple(
                 Nil,
                 True,
@@ -277,7 +290,7 @@ impl<'a> std::fmt::Debug for InstructionDisassembler<'a> {
                 Multiply,
                 Divide,
                 Not,
-                Print
+                Print,
             ),
         )?;
         Ok(())
