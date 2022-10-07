@@ -239,6 +239,14 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    fn begin_scope(&mut self) {
+        self.scope_depth += 1;
+    }
+
+    fn end_scope(&mut self) {
+        self.scope_depth -= 1;
+    }
+
     fn binary(&mut self, _can_assign: bool) {
         let operator = self.previous.as_ref().unwrap().kind;
         let rule = self.get_rule(operator);
@@ -431,6 +439,13 @@ impl<'a> Compiler<'a> {
         self.parse_precedence(Precedence::Assignment);
     }
 
+    fn block(&mut self) {
+        while !self.check(TK::RightBrace) && !self.check(TK::Eof) {
+            self.declaration();
+        }
+        self.consume(TK::RightBrace, "Expect '}' after block.");
+    }
+
     fn var_declaration(&mut self) {
         let global = self.parse_variable("Expect variable name.");
 
@@ -465,6 +480,10 @@ impl<'a> Compiler<'a> {
     fn statement(&mut self) {
         if self.match_(TK::Print) {
             self.print_statement();
+        } else if self.match_(TK::LeftBrace) {
+            self.begin_scope();
+            self.block();
+            self.end_scope();
         } else {
             self.expression_statement();
         }
