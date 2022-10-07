@@ -26,6 +26,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * `OpCode::ConstantLong` / `OP_CONSTANT_LONG`: support for more than 256 constants
   * Also added `OpCode::DefineGlobalLong`, `OpCode::GetGlobalLong`, `OpCode::SetGlobalLong`.
 * Optimized negation to mutate the stack value in place, for about a 1.22x speedup. Also did the same for binary operations; strangely, addition (the only one I tested) only sped up by about 1.02x, if that (significant of noise on the measurement).
+* 21/1: Don't add global name to constant table each time a global is accessed (name -> constant index hashtable in compiler)
 * TODO ternary operator
 * STRETCH: add error handling to user code
 * TODO add a `Value` variant that holds a reference to a string value kept alive somewhere else (Chapter 19)

@@ -11,7 +11,7 @@ pub struct CodeOffset(pub usize);
 #[derive(Shrinkwrap)]
 pub struct ConstantIndex(pub u8);
 
-#[derive(Shrinkwrap)]
+#[derive(Shrinkwrap, Clone)]
 pub struct ConstantLongIndex(pub usize);
 
 #[derive(IntoPrimitive, TryFromPrimitive, PartialEq, Eq, Debug, Clone)]

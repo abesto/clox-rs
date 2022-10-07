@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::{
@@ -118,6 +120,7 @@ pub struct Compiler<'a> {
     had_error: bool,
     panic_mode: bool,
     chunk: Chunk,
+    globals_by_name: HashMap<String, ConstantLongIndex>, // Watch out; manage this together with `self.chunk`
     rules: Rules<'a>,
 }
 
@@ -126,6 +129,7 @@ impl<'a> Compiler<'a> {
     fn new(source: &'a [u8]) -> Self {
         Self {
             chunk: Chunk::new("<main>"),
+            globals_by_name: HashMap::new(),
             scanner: Scanner::new(source),
             previous: None,
             current: None,
@@ -358,7 +362,14 @@ impl<'a> Compiler<'a> {
     where
         S: ToString,
     {
-        self.current_chunk().make_constant(name.to_string().into())
+        let name = name.to_string();
+        if let Some(index) = self.globals_by_name.get(&name) {
+            index.clone()
+        } else {
+            let index = self.current_chunk().make_constant(name.to_string().into());
+            self.globals_by_name.insert(name, index.clone());
+            index
+        }
     }
 
     fn parse_variable(&mut self, msg: &str) -> ConstantLongIndex {
