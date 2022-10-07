@@ -115,7 +115,7 @@ fn make_rules<'a>() -> Rules<'a> {
 
 struct Local<'a> {
     name: Token<'a>,
-    depth: usize,
+    depth: i32,
 }
 
 pub struct Compiler<'a> {
@@ -128,7 +128,7 @@ pub struct Compiler<'a> {
     globals_by_name: HashMap<String, ConstantLongIndex>,
     rules: Rules<'a>,
     locals: Vec<Local<'a>>,
-    scope_depth: u8,
+    scope_depth: i32,
 }
 
 impl<'a> Compiler<'a> {
@@ -245,6 +245,15 @@ impl<'a> Compiler<'a> {
 
     fn end_scope(&mut self) {
         self.scope_depth -= 1;
+        while self
+            .locals
+            .last()
+            .map(|local| local.depth > self.scope_depth)
+            .unwrap_or(false)
+        {
+            self.emit_byte(OpCode::Pop);
+            self.locals.pop();
+        }
     }
 
     fn binary(&mut self, _can_assign: bool) {
@@ -389,12 +398,52 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn parse_variable(&mut self, msg: &str) -> ConstantLongIndex {
+    fn add_local(&mut self, name: Token<'a>) {
+        if self.locals.len() > usize::from(u8::MAX) + 1 {
+            self.error("Too many local variables in function.");
+            return;
+        }
+        self.locals.push(Local {
+            name,
+            depth: self.scope_depth,
+        });
+    }
+
+    fn declare_variable(&mut self) {
+        if self.scope_depth == 0 {
+            return;
+        }
+
+        let name = self.previous.clone().unwrap();
+        if self.locals.iter().rev().any(|local| {
+            if local.depth != -1 && local.depth < self.scope_depth {
+                false
+            } else {
+                local.name.lexeme == name.lexeme
+            }
+        }) {
+            self.error("Already a variable with this name in this scope.");
+        }
+
+        self.add_local(name);
+    }
+
+    fn parse_variable(&mut self, msg: &str) -> Option<ConstantLongIndex> {
         self.consume(TK::Identifier, msg);
-        self.identifier_constant(self.previous.as_ref().unwrap().as_str().to_string())
+
+        self.declare_variable();
+        if self.scope_depth > 0 {
+            None
+        } else {
+            Some(self.identifier_constant(self.previous.as_ref().unwrap().as_str().to_string()))
+        }
     }
 
     fn define_variable(&mut self, global: ConstantLongIndex) {
+        if self.scope_depth > 0 {
+            return;
+        }
+
         if let Ok(short) = u8::try_from(*global) {
             self.emit_bytes(OpCode::DefineGlobal, short);
         } else {
@@ -456,7 +505,9 @@ impl<'a> Compiler<'a> {
         }
         self.consume(TK::Semicolon, "Expect ';' after variable declaration.");
 
-        self.define_variable(global);
+        if let Some(global) = global {
+            self.define_variable(global);
+        }
     }
 
     fn expression_statement(&mut self) {
