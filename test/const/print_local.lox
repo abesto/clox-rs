@@ -1,0 +1,4 @@
+{
+    const x = "foo";
+    print x; // expect: foo
+}

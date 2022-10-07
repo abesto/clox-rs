@@ -1,0 +1,4 @@
+{
+    const x;
+    x = 3; // Error at '3': Reassignment to local 'const'.
+}

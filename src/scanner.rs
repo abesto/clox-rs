@@ -52,6 +52,7 @@ pub enum TokenKind {
     Super,
     This,
     True,
+    Const,
     Var,
     While,
 
@@ -252,37 +253,29 @@ impl<'a> Scanner<'a> {
     fn identifier_type(&mut self) -> TokenKind {
         match self.source[self.start] {
             b'a' => self.check_keyword(1, "nd", TokenKind::And),
-            b'c' => self.check_keyword(1, "lass", TokenKind::Class),
+            b'c' => match self.source.get(self.start + 1) {
+                Some(b'l') => self.check_keyword(2, "ass", TokenKind::Class),
+                Some(b'o') => self.check_keyword(2, "nst", TokenKind::Const),
+                _ => TokenKind::Identifier,
+            },
             b'e' => self.check_keyword(1, "lse", TokenKind::Else),
-            b'f' => {
-                if self.current - self.start > 1 {
-                    match self.source[self.start + 1] {
-                        b'a' => self.check_keyword(2, "lse", TokenKind::False),
-                        b'o' => self.check_keyword(2, "r", TokenKind::For),
-                        b'u' => self.check_keyword(2, "n", TokenKind::Fun),
-                        _ => TokenKind::Identifier,
-                    }
-                } else {
-                    TokenKind::Identifier
-                }
-            }
+            b'f' => match self.source.get(self.start + 1) {
+                Some(b'a') => self.check_keyword(2, "lse", TokenKind::False),
+                Some(b'o') => self.check_keyword(2, "r", TokenKind::For),
+                Some(b'u') => self.check_keyword(2, "n", TokenKind::Fun),
+                _ => TokenKind::Identifier,
+            },
             b'i' => self.check_keyword(1, "f", TokenKind::If),
             b'n' => self.check_keyword(1, "il", TokenKind::Nil),
             b'o' => self.check_keyword(1, "r", TokenKind::Or),
             b'p' => self.check_keyword(1, "rint", TokenKind::Print),
             b'r' => self.check_keyword(1, "eturn", TokenKind::Return),
             b's' => self.check_keyword(1, "uper", TokenKind::Super),
-            b't' => {
-                if self.current - self.start > 1 {
-                    match self.source[self.start + 1] {
-                        b'h' => self.check_keyword(2, "is", TokenKind::This),
-                        b'r' => self.check_keyword(2, "ue", TokenKind::True),
-                        _ => TokenKind::Identifier,
-                    }
-                } else {
-                    TokenKind::Identifier
-                }
-            }
+            b't' => match self.source.get(self.start + 1) {
+                Some(b'h') => self.check_keyword(2, "is", TokenKind::This),
+                Some(b'r') => self.check_keyword(2, "ue", TokenKind::True),
+                _ => TokenKind::Identifier,
+            },
             b'v' => self.check_keyword(1, "ar", TokenKind::Var),
             b'w' => self.check_keyword(1, "hile", TokenKind::While),
             _ => TokenKind::Identifier,

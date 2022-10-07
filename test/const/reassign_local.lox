@@ -1,0 +1,5 @@
+{
+    const x = 3;
+    print 3;  // No output because of compile error below
+    x = 4;  // Error at '4': Reassignment to local 'const'.
+}

@@ -1,0 +1,2 @@
+const x;
+x = 3; // expect runtime error: Reassignment to global 'const'.

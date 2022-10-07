@@ -22,6 +22,9 @@ pub enum OpCode {
 
     DefineGlobal,
     DefineGlobalLong,
+    DefineGlobalConst,
+    DefineGlobalConstLong,
+
     GetGlobal,
     GetGlobalLong,
     SetGlobal,
@@ -56,8 +59,13 @@ impl OpCode {
     pub fn instruction_len(&self) -> usize {
         use OpCode::*;
         match self {
-            Constant | GetLocal | SetLocal | GetGlobal | SetGlobal | DefineGlobal => 2,
-            ConstantLong | GetGlobalLong | SetGlobalLong | DefineGlobalLong => 4,
+            Constant | GetLocal | SetLocal | GetGlobal | SetGlobal | DefineGlobal
+            | DefineGlobalConst => 2,
+            ConstantLong
+            | GetGlobalLong
+            | SetGlobalLong
+            | DefineGlobalLong
+            | DefineGlobalConstLong => 4,
             Negate | Add | Subtract | Multiply | Divide | Return | Nil | True | False | Not
             | Equal | Greater | Less | Print | Pop => 1,
         }
@@ -279,6 +287,8 @@ impl<'a> std::fmt::Debug for InstructionDisassembler<'a> {
                 GetGlobal,
                 SetGlobal,
                 DefineGlobalLong,
+                DefineGlobalConst,
+                DefineGlobalConstLong,
                 GetGlobalLong,
                 SetGlobalLong,
                 Pop,

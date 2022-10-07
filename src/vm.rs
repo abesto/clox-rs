@@ -34,11 +34,16 @@ macro_rules! binary_op {
 
 type BinaryOp<T> = fn(f64, f64) -> T;
 
+struct Global {
+    value: Value,
+    mutable: bool,
+}
+
 pub struct VM {
     chunk: Option<Chunk>,
     ip: usize,
     stack: Vec<Value>,
-    globals: HashMap<String, Value>,
+    globals: HashMap<String, Global>,
 }
 
 impl VM {
@@ -103,7 +108,7 @@ impl VM {
                 op @ (OpCode::GetGlobal | OpCode::GetGlobalLong) => {
                     match self.read_constant(op == OpCode::GetGlobalLong).clone() {
                         Value::String(name) => match self.globals.get(&*name) {
-                            Some(value) => self.stack.push(value.clone()),
+                            Some(global) => self.stack.push(global.value.clone()),
                             None => {
                                 runtime_error!(self, "Undefined variable '{}'.", name);
                                 return InterpretResult::RuntimeError;
@@ -115,18 +120,17 @@ impl VM {
                 op @ (OpCode::SetGlobal | OpCode::SetGlobalLong) => {
                     match self.read_constant(op == OpCode::SetGlobalLong).clone() {
                         Value::String(name) => {
-                            if self
-                                .globals
-                                .insert(
-                                    *name.clone(),
-                                    self.stack
-                                        .last()
-                                        .unwrap_or_else(|| panic!("stack underflow in {:?}", op))
-                                        .clone(),
-                                )
-                                .is_none()
-                            {
-                                self.globals.remove(name.as_ref());
+                            if let Some(global) = self.globals.get_mut(&*name) {
+                                if !global.mutable {
+                                    runtime_error!(self, "Reassignment to global 'const'.");
+                                    return InterpretResult::RuntimeError;
+                                }
+                                global.value = self
+                                    .stack
+                                    .last()
+                                    .unwrap_or_else(|| panic!("stack underflow in {:?}", op))
+                                    .clone();
+                            } else {
                                 runtime_error!(self, "Undefined variable '{}'.", name);
                                 return InterpretResult::RuntimeError;
                             }
@@ -137,15 +141,23 @@ impl VM {
                         ),
                     }
                 }
-                op @ (OpCode::DefineGlobal | OpCode::DefineGlobalLong) => {
+                op @ (OpCode::DefineGlobal
+                | OpCode::DefineGlobalLong
+                | OpCode::DefineGlobalConst
+                | OpCode::DefineGlobalConstLong) => {
                     match self.read_constant(op == OpCode::DefineGlobalLong).clone() {
                         Value::String(name) => {
                             self.globals.insert(
                                 *name,
-                                self.stack
-                                    .last()
-                                    .unwrap_or_else(|| panic!("stack underflow in {:?}", op))
-                                    .clone(),
+                                Global {
+                                    value: self
+                                        .stack
+                                        .last()
+                                        .unwrap_or_else(|| panic!("stack underflow in {:?}", op))
+                                        .clone(),
+                                    mutable: op != OpCode::DefineGlobalConst
+                                        && op != OpCode::DefineGlobalConstLong,
+                                },
                             );
                             self.stack.pop();
                         }
