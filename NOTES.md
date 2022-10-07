@@ -28,6 +28,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * Optimized negation to mutate the stack value in place, for about a 1.22x speedup. Also did the same for binary operations; strangely, addition (the only one I tested) only sped up by about 1.02x, if that (significant of noise on the measurement).
 * 21/1: Don't add global name to constant table each time a global is accessed (name -> constant index hashtable in compiler)
 * 22/3: `const` keyword marks variables immutable, can only be assigned in the declaration statement.
+* 22/4: Allow more than 256 local variables in scope at a time.
 * TODO ternary operator
 * STRETCH: add error handling to user code
 * TODO add a `Value` variant that holds a reference to a string value kept alive somewhere else (Chapter 19)

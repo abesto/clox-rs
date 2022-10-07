@@ -92,14 +92,30 @@ impl VM {
                 OpCode::Pop => {
                     self.stack.pop().expect("stack underflow in OP_POP");
                 }
-                OpCode::GetLocal => {
-                    let slot = self.read_byte("Internal error: missing operand for OP_GET_LOCAL");
-                    let value = self.stack[usize::from(slot)].clone();
+                op @ (OpCode::GetLocal | OpCode::GetLocalLong) => {
+                    let slot = if op == OpCode::GetLocalLong {
+                        self.read_24bit_number(
+                            "Internal error: missing operand for OP_GET_LOCAL_LONG",
+                        )
+                    } else {
+                        usize::from(
+                            self.read_byte("Internal error: missing operand for OP_GET_LOCAL"),
+                        )
+                    };
+                    let value = self.stack[slot].clone();
                     self.stack.push(value);
                 }
-                OpCode::SetLocal => {
-                    let slot = self.read_byte("Internal error: missing operand for OP_SET_LOCAL");
-                    self.stack[usize::from(slot)] = self
+                op @ (OpCode::SetLocal | OpCode::SetLocalLong) => {
+                    let slot = if op == OpCode::GetLocalLong {
+                        self.read_24bit_number(
+                            "Internal error: missing operand for OP_SET_LOCAL_LONG",
+                        )
+                    } else {
+                        usize::from(
+                            self.read_byte("Internal error: missing operand for OP_SET_LOCAL"),
+                        )
+                    };
+                    self.stack[slot] = self
                         .stack
                         .last()
                         .expect("stack underflow in OP_SET_LOCAL")
@@ -250,11 +266,15 @@ impl VM {
         self.chunk.as_ref().unwrap().code().get(index)
     }
 
+    fn read_24bit_number(&mut self, msg: &str) -> usize {
+        (usize::from(self.read_byte(msg)) << 16)
+            + (usize::from(self.read_byte(msg)) << 8)
+            + (usize::from(self.read_byte(msg)))
+    }
+
     fn read_constant(&mut self, long: bool) -> &Value {
         let index = if long {
-            (usize::from(self.read_byte("read_constant/long/0")) << 16)
-                + (usize::from(self.read_byte("read_constant/long/1")) << 8)
-                + (usize::from(self.read_byte("read_constant/long/2")))
+            self.read_24bit_number("read_constant/long")
         } else {
             usize::from(self.read_byte("read_constant"))
         };

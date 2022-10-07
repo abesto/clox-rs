@@ -335,11 +335,16 @@ impl<'a> Compiler<'a> {
                     OpCode::SetGlobal
                 }
             } else {
-                let local = &self.locals[local_index.unwrap()];
+                let local_index = local_index.unwrap();
+                let local = &self.locals[local_index];
                 if local.depth != -1 && !local.mutable {
                     self.error("Reassignment to local 'const'.");
                 }
-                OpCode::SetLocal
+                if local_index > u8::MAX.into() {
+                    OpCode::SetLocalLong
+                } else {
+                    OpCode::SetLocal
+                }
             }
         } else if let Some(global_index) = global_index {
             if global_index > u8::MAX.into() {
@@ -347,6 +352,8 @@ impl<'a> Compiler<'a> {
             } else {
                 OpCode::GetGlobal
             }
+        } else if local_index.unwrap() > u8::MAX.into() {
+            OpCode::GetLocalLong
         } else {
             OpCode::GetLocal
         };
