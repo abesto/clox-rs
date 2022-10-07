@@ -1,4 +1,5 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use paste::paste;
 use shrinkwraprs::Shrinkwrap;
 
 use crate::{types::Line, value::Value};
@@ -13,15 +14,18 @@ pub struct ConstantIndex(pub u8);
 #[derive(Shrinkwrap)]
 pub struct ConstantLongIndex(pub usize);
 
-#[derive(IntoPrimitive, TryFromPrimitive)]
+#[derive(IntoPrimitive, TryFromPrimitive, PartialEq, Eq, Debug, Clone)]
 #[repr(u8)]
 pub enum OpCode {
     Constant,
     ConstantLong,
 
     DefineGlobal,
+    DefineGlobalLong,
     GetGlobal,
+    GetGlobalLong,
     SetGlobal,
+    SetGlobalLong,
 
     Nil,
     True,
@@ -52,7 +56,8 @@ impl OpCode {
             Constant => 2,
             ConstantLong => 4,
             Negate | Add | Subtract | Multiply | Divide | Return | Nil | True | False | Not
-            | Equal | Greater | Less | Print | Pop | DefineGlobal | GetGlobal | SetGlobal => 1,
+            | Equal | Greater | Less | Print | Pop | DefineGlobal | GetGlobal | SetGlobal
+            | DefineGlobalLong | SetGlobalLong | GetGlobalLong => 1,
         }
     }
 }
@@ -111,16 +116,21 @@ impl Chunk {
         if let Ok(short_index) = u8::try_from(*long_index) {
             self.write(OpCode::Constant, line);
             self.write(short_index, line);
+            true
         } else {
             self.write(OpCode::ConstantLong, line);
-            let (a, b, c, d) = crate::bitwise::get_4_bytes(*long_index);
-            if a > 0 {
-                return false;
-            }
-            self.write(b, line);
-            self.write(c, line);
-            self.write(d, line);
+            self.write_24bit_number(*long_index, line)
         }
+    }
+
+    pub fn write_24bit_number(&mut self, what: usize, line: Line) -> bool {
+        let (a, b, c, d) = crate::bitwise::get_4_bytes(what);
+        if a > 0 {
+            return false;
+        }
+        self.write(b, line);
+        self.write(c, line);
+        self.write(d, line);
         true
     }
 }
@@ -192,9 +202,34 @@ impl<'a> InstructionDisassembler<'a> {
         )
     }
 
-    fn debug_simple_opcode(&self, f: &mut std::fmt::Formatter, name: &str) -> std::fmt::Result {
+    fn debug_simple_opcode(
+        &self,
+        f: &mut std::fmt::Formatter,
+        name: &str,
+        _offset: &CodeOffset,
+    ) -> std::fmt::Result {
         writeln!(f, "{}", name)
     }
+}
+
+macro_rules! disassemble {
+    (
+        $self:ident,
+        $f:ident,
+        $offset:ident,
+        $m:expr,
+        $(
+            $k:ident(
+                $($v:ident),* $(,)?
+            )
+        ),* $(,)?
+    ) => {paste! {
+        match $m {
+            $($(
+                OpCode::$v => $self.[<debug_ $k _opcode>]($f, stringify!([<OP_ $v:snake:upper>]), $offset)
+            ),*),*
+        }
+    }}
 }
 
 impl<'a> std::fmt::Debug for InstructionDisassembler<'a> {
@@ -211,30 +246,40 @@ impl<'a> std::fmt::Debug for InstructionDisassembler<'a> {
             write!(f, "{:>4} ", *self.chunk.get_line(offset))?;
         }
 
-        match OpCode::try_from_primitive(code[*offset.as_ref()])
-            .unwrap_or_else(|_| panic!("Unknown opcode: {}", code[*offset.as_ref()]))
-        {
-            OpCode::Constant => self.debug_constant_opcode(f, "OP_CONSTANT", offset),
-            OpCode::ConstantLong => self.debug_constant_long_opcode(f, "OP_CONSTANT_LONG", offset),
-            OpCode::Nil => self.debug_simple_opcode(f, "OP_NIL"),
-            OpCode::True => self.debug_simple_opcode(f, "OP_TRUE"),
-            OpCode::False => self.debug_simple_opcode(f, "OP_FALSE"),
-            OpCode::Return => self.debug_simple_opcode(f, "OP_RETURN"),
-            OpCode::Negate => self.debug_simple_opcode(f, "OP_NEGATE"),
-            OpCode::Add => self.debug_simple_opcode(f, "OP_ADD"),
-            OpCode::Subtract => self.debug_simple_opcode(f, "OP_SUBTRACT"),
-            OpCode::Multiply => self.debug_simple_opcode(f, "OP_MULTIPLY"),
-            OpCode::Divide => self.debug_simple_opcode(f, "OP_DIVIDE"),
-            OpCode::Not => self.debug_simple_opcode(f, "OP_NOT"),
-            OpCode::Equal => self.debug_simple_opcode(f, "OP_EQUAL"),
-            OpCode::Greater => self.debug_simple_opcode(f, "OP_GREATER"),
-            OpCode::Less => self.debug_simple_opcode(f, "OP_LESS"),
-            OpCode::Print => self.debug_simple_opcode(f, "OP_PRINT"),
-            OpCode::Pop => self.debug_simple_opcode(f, "OP_POP"),
-            OpCode::DefineGlobal => self.debug_simple_opcode(f, "OP_DEFINE_GLOBAL"),
-            OpCode::GetGlobal => self.debug_simple_opcode(f, "OP_GET_GLOBAL"),
-            OpCode::SetGlobal => self.debug_simple_opcode(f, "OP_SET_GLOBAL"),
-        }?;
+        let opcode = OpCode::try_from_primitive(code[*offset.as_ref()])
+            .unwrap_or_else(|_| panic!("Unknown opcode: {}", code[*offset.as_ref()]));
+
+        disassemble!(
+            self,
+            f,
+            offset,
+            opcode,
+            constant(Constant),
+            constant_long(ConstantLong),
+            simple(
+                Nil,
+                True,
+                False,
+                Return,
+                Negate,
+                DefineGlobal,
+                GetGlobal,
+                SetGlobal,
+                DefineGlobalLong,
+                GetGlobalLong,
+                SetGlobalLong,
+                Pop,
+                Equal,
+                Greater,
+                Less,
+                Add,
+                Subtract,
+                Multiply,
+                Divide,
+                Not,
+                Print
+            ),
+        )?;
         Ok(())
     }
 }

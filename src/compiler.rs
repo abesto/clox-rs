@@ -190,6 +190,11 @@ impl<'a> Compiler<'a> {
         self.current_chunk().write(byte, line)
     }
 
+    fn emit_24bit_number(&mut self, number: usize) -> bool {
+        let line = self.line();
+        self.current_chunk().write_24bit_number(number, line)
+    }
+
     fn emit_bytes<T1, T2>(&mut self, byte1: T1, byte2: T2)
     where
         T1: Into<u8>,
@@ -283,13 +288,28 @@ impl<'a> Compiler<'a> {
         S: ToString,
     {
         let arg = self.identifier_constant(name);
-        let arg = u8::try_from(*arg).unwrap();
+        let arg = *arg;
+        let short_arg = u8::try_from(arg);
+        let is_long = short_arg.is_err();
 
-        if can_assign && self.match_(TK::Equal) {
+        let op = if can_assign && self.match_(TK::Equal) {
             self.expression();
-            self.emit_bytes(OpCode::SetGlobal, arg);
+            if is_long {
+                OpCode::SetGlobalLong
+            } else {
+                OpCode::SetGlobal
+            }
+        } else if is_long {
+            OpCode::GetGlobalLong
         } else {
-            self.emit_bytes(OpCode::GetGlobal, arg);
+            OpCode::GetGlobal
+        };
+        self.emit_byte(op.clone());
+
+        if let Ok(short_arg) = short_arg {
+            self.emit_byte(short_arg);
+        } else if !self.emit_24bit_number(arg) {
+            self.error(&format!("Too many globals in {:?}", op));
         }
     }
 
@@ -350,7 +370,10 @@ impl<'a> Compiler<'a> {
         if let Ok(short) = u8::try_from(*global) {
             self.emit_bytes(OpCode::DefineGlobal, short);
         } else {
-            self.error("Too many globals!")
+            self.emit_byte(OpCode::DefineGlobalLong);
+            if !self.emit_24bit_number(*global) {
+                self.error("Too many globals in OP_DEFINE_GLOBAL_LONG!");
+            }
         }
     }
 

@@ -17,5 +17,10 @@ craftinginterpreters-test: $(DEBUG_BIN)
 	cd $(CRAFTING_INTERPRETERS) && \
 		dart tool/bin/test.dart $(test_level) --interpreter $(home)/$(DEBUG_BIN)
 
+
+.PHONY: custom-dart-test
+custom-dart-test: $(DEBUG_BIN)
+	dart $(CRAFTING_INTERPRETERS)/tool/bin/test.dart clox --interpreter $(DEBUG_BIN)
+
 .PHONY: test
-test: cargo-test craftinginterpreters-test
+test: cargo-test craftinginterpreters-test custom-dart-test
