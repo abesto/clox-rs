@@ -89,7 +89,7 @@ pub(super) fn make_rules<'a>() -> Rules<'a> {
         Identifier   = [variable, None,   None],
         String       = [string,   None,   None],
         Number       = [number,   None,   None],
-        And          = [None,     None,   None],
+        And          = [None,     and,    And],
         Class        = [None,     None,   None],
         Else         = [None,     None,   None],
         False        = [literal,  None,   None],
@@ -211,5 +211,12 @@ impl<'a> Compiler<'a> {
             self.previous.as_ref().unwrap().as_str().to_string(),
             can_assign,
         );
+    }
+
+    fn and(&mut self, _can_assign: bool) {
+        let end_jump = self.emit_jump(OpCode::JumpIfFalse);
+        self.emit_byte(OpCode::Pop);
+        self.parse_precedence(Precedence::And);
+        self.patch_jump(end_jump);
     }
 }
