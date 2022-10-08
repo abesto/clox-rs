@@ -1,4 +1,7 @@
-use crate::{chunk::OpCode, value::Value};
+use crate::{
+    chunk::{CodeOffset, OpCode},
+    value::Value,
+};
 
 use super::Compiler;
 
@@ -36,5 +39,29 @@ impl<'a> Compiler<'a> {
         if !self.chunk.write_constant(value.into(), self.line()) {
             self.error("Too many constants in one chunk.");
         }
+    }
+
+    /// Returns the offset of the last byte of the emitted jump instruction
+    pub(super) fn emit_jump(&mut self, instruction: OpCode) -> CodeOffset {
+        self.emit_byte(instruction);
+        let retval = CodeOffset(self.current_chunk().code().len() - 1);
+        self.emit_byte(0xff);
+        self.emit_byte(0xff);
+        retval
+    }
+
+    /// `jump_offset`: the code offset of the last byte of the jump instruction
+    pub(super) fn patch_jump(&mut self, jump_offset: CodeOffset) {
+        let jump_length =
+            self.current_chunk().code().len() - *jump_offset - OpCode::Jump.instruction_len();
+
+        if jump_length > usize::from(u16::MAX) {
+            self.error("Too much code to jump over.");
+        }
+
+        self.current_chunk()
+            .patch(CodeOffset(*jump_offset + 1), (jump_length >> 8) as u8);
+        self.current_chunk()
+            .patch(CodeOffset(*jump_offset + 2), jump_length as u8);
     }
 }

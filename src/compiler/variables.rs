@@ -64,7 +64,7 @@ impl<'a> Compiler<'a> {
             OpCode::GetLocal
         };
 
-        self.emit_byte(op.clone());
+        self.emit_byte(op);
 
         let arg = local_index.map(usize::from).or(global_index).unwrap();
         if let Ok(short_arg) = u8::try_from(arg) {

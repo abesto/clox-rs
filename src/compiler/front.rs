@@ -1,9 +1,5 @@
 use super::{rules::Precedence, Compiler};
-use crate::{
-    chunk::{Chunk, OpCode},
-    scanner::TokenKind as TK,
-    types::Line,
-};
+use crate::{chunk::OpCode, scanner::TokenKind as TK, types::Line};
 
 impl<'a> Compiler<'a> {
     pub(super) fn advance(&mut self) {
@@ -32,10 +28,6 @@ impl<'a> Compiler<'a> {
 
     pub(super) fn line(&self) -> Line {
         self.previous.as_ref().unwrap().line
-    }
-
-    pub(super) fn current_chunk(&mut self) -> &mut Chunk {
-        &mut self.chunk
     }
 
     pub(super) fn match_(&mut self, kind: TK) -> bool {
@@ -93,6 +85,25 @@ impl<'a> Compiler<'a> {
         self.emit_byte(OpCode::Pop);
     }
 
+    fn if_statement(&mut self) {
+        self.consume(TK::LeftParen, "Expect '(' after 'if'.");
+        self.expression();
+        self.consume(TK::RightParen, "Expect ')' after condition.");
+
+        let then_jump = self.emit_jump(OpCode::JumpIfFalse);
+        self.emit_byte(OpCode::Pop);
+        self.statement();
+
+        let else_jump = self.emit_jump(OpCode::Jump);
+        self.patch_jump(then_jump);
+        self.emit_byte(OpCode::Pop);
+        if self.match_(TK::Else) {
+            self.statement();
+        }
+
+        self.patch_jump(else_jump);
+    }
+
     pub(super) fn declaration(&mut self) {
         if self.match_(TK::Var) {
             self.var_declaration(true);
@@ -110,6 +121,8 @@ impl<'a> Compiler<'a> {
     fn statement(&mut self) {
         if self.match_(TK::Print) {
             self.print_statement();
+        } else if self.match_(TK::If) {
+            self.if_statement();
         } else if self.match_(TK::LeftBrace) {
             self.begin_scope();
             self.block();

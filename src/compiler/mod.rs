@@ -75,4 +75,8 @@ impl<'a> Compiler<'a> {
             println!("{:?}", self.chunk);
         }
     }
+
+    pub(super) fn current_chunk(&mut self) -> &mut Chunk {
+        &mut self.chunk
+    }
 }

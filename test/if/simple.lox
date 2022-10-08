@@ -1,0 +1,17 @@
+const x = 2;
+
+if (x == 2) {
+    print true; // expect: true
+    print x; // expect: 2
+} else {
+    print false;
+    print x;
+}
+
+if (x == 3) {
+    print true;
+    print x;
+} else {
+    print false; // expect: false
+    print x; // expect: 2
+}

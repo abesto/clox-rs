@@ -14,7 +14,7 @@ pub struct ConstantIndex(pub u8);
 #[derive(Shrinkwrap, Clone)]
 pub struct ConstantLongIndex(pub usize);
 
-#[derive(IntoPrimitive, TryFromPrimitive, PartialEq, Eq, Debug, Clone)]
+#[derive(IntoPrimitive, TryFromPrimitive, PartialEq, Eq, Debug, Clone, Copy)]
 #[repr(u8)]
 pub enum OpCode {
     Constant,
@@ -34,6 +34,9 @@ pub enum OpCode {
     GetLocalLong,
     SetLocal,
     SetLocalLong,
+
+    Jump,
+    JumpIfFalse,
 
     Nil,
     True,
@@ -60,19 +63,21 @@ impl OpCode {
     /// Length of the instruction in bytes, including the operator and operands
     pub fn instruction_len(&self) -> usize {
         use OpCode::*;
-        match self {
-            Constant | GetLocal | SetLocal | GetGlobal | SetGlobal | DefineGlobal
-            | DefineGlobalConst => 2,
-            ConstantLong
-            | GetGlobalLong
-            | SetGlobalLong
-            | DefineGlobalLong
-            | DefineGlobalConstLong
-            | GetLocalLong
-            | SetLocalLong => 4,
-            Negate | Add | Subtract | Multiply | Divide | Return | Nil | True | False | Not
-            | Equal | Greater | Less | Print | Pop => 1,
-        }
+        std::mem::size_of::<OpCode>()
+            + match self {
+                Negate | Add | Subtract | Multiply | Divide | Return | Nil | True | False | Not
+                | Equal | Greater | Less | Print | Pop => 0,
+                Constant | GetLocal | SetLocal | GetGlobal | SetGlobal | DefineGlobal
+                | DefineGlobalConst => 1,
+                JumpIfFalse | Jump => 2,
+                ConstantLong
+                | GetGlobalLong
+                | SetGlobalLong
+                | DefineGlobalLong
+                | DefineGlobalConstLong
+                | GetLocalLong
+                | SetLocalLong => 3,
+            }
     }
 }
 
@@ -118,6 +123,13 @@ impl Chunk {
             }
             _ => self.lines.push((1, line)),
         }
+    }
+
+    pub fn patch<T>(&mut self, offset: CodeOffset, what: T)
+    where
+        T: Into<u8>,
+    {
+        self.code[*offset] = what.into();
     }
 
     pub fn make_constant(&mut self, what: Value) -> ConstantLongIndex {
@@ -247,6 +259,24 @@ impl<'a> InstructionDisassembler<'a> {
             + (usize::from(code[offset.as_ref() + 3]));
         writeln!(f, "{:-16} {:>4}", name, slot)
     }
+
+    fn debug_jump_opcode(
+        &self,
+        f: &mut std::fmt::Formatter,
+        name: &str,
+        offset: &CodeOffset,
+    ) -> std::fmt::Result {
+        let code = self.chunk.code();
+        let jump = (usize::from(code[offset.as_ref() + 1]) << 8)
+            + (usize::from(code[offset.as_ref() + 2]));
+        writeln!(
+            f,
+            "{:-16} {:>4} -> {}",
+            name,
+            **offset,
+            **offset + OpCode::Jump.instruction_len() + jump
+        )
+    }
 }
 
 macro_rules! disassemble {
@@ -307,6 +337,7 @@ impl<'a> std::fmt::Debug for InstructionDisassembler<'a> {
             ),
             byte(GetLocal, SetLocal),
             byte_long(GetLocalLong, SetLocalLong),
+            jump(Jump, JumpIfFalse),
             simple(
                 Nil, True, False, Return, Negate, Pop, Equal, Greater, Less, Add, Subtract,
                 Multiply, Divide, Not, Print,
@@ -327,4 +358,10 @@ impl Chunk {
         }
         line
     }
+}
+
+#[cfg(test)]
+#[test]
+fn opcode_size() {
+    assert_eq!(std::mem::size_of::<OpCode>(), 1);
 }

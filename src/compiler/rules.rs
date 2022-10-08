@@ -7,7 +7,7 @@ use super::Compiler;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, TryFromPrimitive, IntoPrimitive)]
 #[repr(u8)]
-pub enum Precedence {
+pub(super) enum Precedence {
     None,
     Assignment, // =
     Or,         // or
@@ -23,7 +23,7 @@ pub enum Precedence {
 
 type ParseFn<'a> = fn(&mut Compiler<'a>, bool) -> ();
 
-pub struct Rule<'a> {
+pub(super) struct Rule<'a> {
     prefix: Option<ParseFn<'a>>,
     infix: Option<ParseFn<'a>>,
     precedence: Precedence,

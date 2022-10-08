@@ -183,6 +183,23 @@ impl VM {
                         ),
                     }
                 }
+                OpCode::JumpIfFalse => {
+                    let offset = self
+                        .read_16bit_number("Internal error: missing operand for OP_JUMP_IF_FALSE");
+                    if self
+                        .stack
+                        .last()
+                        .expect("stack underflow in OP_JUMP_IF_FALSE")
+                        .is_falsey()
+                    {
+                        self.ip += offset;
+                    }
+                }
+                OpCode::Jump => {
+                    let offset =
+                        self.read_16bit_number("Internal error: missing operand for OP_JUMP");
+                    self.ip += offset;
+                }
                 OpCode::Return => {
                     return InterpretResult::Ok;
                 }
@@ -263,13 +280,21 @@ impl VM {
     }
 
     fn get_byte(&self, index: usize) -> Option<&u8> {
-        self.chunk.as_ref().unwrap().code().get(index)
+        self.chunk
+            .as_ref()
+            .expect("no chunk in get_byte o.0")
+            .code()
+            .get(index)
     }
 
     fn read_24bit_number(&mut self, msg: &str) -> usize {
         (usize::from(self.read_byte(msg)) << 16)
             + (usize::from(self.read_byte(msg)) << 8)
             + (usize::from(self.read_byte(msg)))
+    }
+
+    fn read_16bit_number(&mut self, msg: &str) -> usize {
+        (usize::from(self.read_byte(msg)) << 8) + (usize::from(self.read_byte(msg)))
     }
 
     fn read_constant(&mut self, long: bool) -> &Value {
