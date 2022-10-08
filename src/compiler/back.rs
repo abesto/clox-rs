@@ -64,4 +64,17 @@ impl<'a> Compiler<'a> {
         self.current_chunk()
             .patch(CodeOffset(*jump_offset + 2), jump_length as u8);
     }
+
+    pub(super) fn emit_loop(&mut self, loop_start: CodeOffset) {
+        let offset =
+            self.current_chunk().code().len() - *loop_start + OpCode::Loop.instruction_len();
+
+        self.emit_byte(OpCode::Loop);
+        if offset > usize::from(u16::MAX) {
+            self.error("Loop body too large.");
+        }
+
+        self.emit_byte((offset >> 8) as u8);
+        self.emit_byte(offset as u8);
+    }
 }

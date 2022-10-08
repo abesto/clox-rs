@@ -1,5 +1,9 @@
 use super::{rules::Precedence, Compiler};
-use crate::{chunk::OpCode, scanner::TokenKind as TK, types::Line};
+use crate::{
+    chunk::{CodeOffset, OpCode},
+    scanner::TokenKind as TK,
+    types::Line,
+};
 
 impl<'a> Compiler<'a> {
     pub(super) fn advance(&mut self) {
@@ -104,6 +108,21 @@ impl<'a> Compiler<'a> {
         self.patch_jump(else_jump);
     }
 
+    fn while_statement(&mut self) {
+        let loop_start = CodeOffset(self.current_chunk().code().len());
+        self.consume(TK::LeftParen, "Expect '(' after 'while'.");
+        self.expression();
+        self.consume(TK::RightParen, "Expect ')' after condition.");
+
+        let exit_jump = self.emit_jump(OpCode::JumpIfFalse);
+        self.emit_byte(OpCode::Pop);
+        self.statement();
+        self.emit_loop(loop_start);
+
+        self.patch_jump(exit_jump);
+        self.emit_byte(OpCode::Pop);
+    }
+
     pub(super) fn declaration(&mut self) {
         if self.match_(TK::Var) {
             self.var_declaration(true);
@@ -123,6 +142,8 @@ impl<'a> Compiler<'a> {
             self.print_statement();
         } else if self.match_(TK::If) {
             self.if_statement();
+        } else if self.match_(TK::While) {
+            self.while_statement();
         } else if self.match_(TK::LeftBrace) {
             self.begin_scope();
             self.block();

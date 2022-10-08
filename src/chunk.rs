@@ -37,6 +37,7 @@ pub enum OpCode {
 
     Jump,
     JumpIfFalse,
+    Loop,
 
     Nil,
     True,
@@ -69,7 +70,7 @@ impl OpCode {
                 | Equal | Greater | Less | Print | Pop => 0,
                 Constant | GetLocal | SetLocal | GetGlobal | SetGlobal | DefineGlobal
                 | DefineGlobalConst => 1,
-                JumpIfFalse | Jump => 2,
+                JumpIfFalse | Jump | Loop => 2,
                 ConstantLong
                 | GetGlobalLong
                 | SetGlobalLong
@@ -269,13 +270,13 @@ impl<'a> InstructionDisassembler<'a> {
         let code = self.chunk.code();
         let jump = (usize::from(code[offset.as_ref() + 1]) << 8)
             + (usize::from(code[offset.as_ref() + 2]));
-        writeln!(
-            f,
-            "{:-16} {:>4} -> {}",
-            name,
-            **offset,
-            **offset + OpCode::Jump.instruction_len() + jump
-        )
+        let target = **offset + OpCode::Jump.instruction_len();
+        let target = if OpCode::try_from_primitive(code[**offset]).unwrap() == OpCode::Loop {
+            target - jump
+        } else {
+            target + jump
+        };
+        writeln!(f, "{:-16} {:>4} -> {}", name, **offset, target)
     }
 }
 
@@ -337,7 +338,7 @@ impl<'a> std::fmt::Debug for InstructionDisassembler<'a> {
             ),
             byte(GetLocal, SetLocal),
             byte_long(GetLocalLong, SetLocalLong),
-            jump(Jump, JumpIfFalse),
+            jump(Jump, JumpIfFalse, Loop),
             simple(
                 Nil, True, False, Return, Negate, Pop, Equal, Greater, Less, Add, Subtract,
                 Multiply, Divide, Not, Print,

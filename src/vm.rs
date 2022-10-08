@@ -200,6 +200,11 @@ impl VM {
                         self.read_16bit_number("Internal error: missing operand for OP_JUMP");
                     self.ip += offset;
                 }
+                OpCode::Loop => {
+                    let offset =
+                        self.read_16bit_number("Internal error: missing operand for OP_+loop");
+                    self.ip -= offset;
+                }
                 OpCode::Return => {
                     return InterpretResult::Ok;
                 }

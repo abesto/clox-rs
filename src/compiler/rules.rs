@@ -97,7 +97,7 @@ pub(super) fn make_rules<'a>() -> Rules<'a> {
         Fun          = [None,     None,   None],
         If           = [None,     None,   None],
         Nil          = [literal,  None,   None],
-        Or           = [None,     None,   None],
+        Or           = [None,     or,     Or],
         Print        = [None,     None,   None],
         Return       = [None,     None,   None],
         Super        = [None,     None,   None],
@@ -217,6 +217,17 @@ impl<'a> Compiler<'a> {
         let end_jump = self.emit_jump(OpCode::JumpIfFalse);
         self.emit_byte(OpCode::Pop);
         self.parse_precedence(Precedence::And);
+        self.patch_jump(end_jump);
+    }
+
+    fn or(&mut self, _can_assign: bool) {
+        let else_jump = self.emit_jump(OpCode::JumpIfFalse);
+        let end_jump = self.emit_jump(OpCode::Jump);
+
+        self.patch_jump(else_jump);
+        self.emit_byte(OpCode::Pop);
+
+        self.parse_precedence(Precedence::Or);
         self.patch_jump(end_jump);
     }
 }
