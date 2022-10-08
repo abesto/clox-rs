@@ -20,9 +20,6 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 
 * Drop the VM stack after we're done interpreting a piece of code. In the REPL, stuff can stay there after runtime errors.
 
-# Bugs
-* `if (x = 3)` doesn't trigger new line number in printed chunk
-
 # Challenges
 
 * `Chunk::lines` uses run-length encoding

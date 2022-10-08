@@ -351,7 +351,7 @@ impl Chunk {
     pub fn get_line(&self, offset: &CodeOffset) -> Line {
         let mut iter = self.lines.iter();
         let (mut consumed, mut line) = iter.next().unwrap();
-        while consumed < *offset.as_ref() {
+        while consumed <= *offset.as_ref() {
             let entry = iter.next().unwrap();
             consumed += entry.0;
             line = entry.1;
