@@ -29,6 +29,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * 21/1: Don't add global name to constant table each time a global is accessed (name -> constant index hashtable in compiler)
 * 22/3: `const` keyword marks variables immutable, can only be assigned in the declaration statement.
 * 22/4: Allow more than 256 local variables in scope at a time.
+* 23/1: `switch` statements.
 * TODO ternary operator
 * STRETCH: add error handling to user code
 * TODO add a `Value` variant that holds a reference to a string value kept alive somewhere else (Chapter 19)

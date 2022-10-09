@@ -170,6 +170,56 @@ impl<'a> Compiler<'a> {
         self.emit_byte(OpCode::Pop);
     }
 
+    fn switch_statement(&mut self) {
+        self.consume(TK::LeftParen, "Expect '(' after 'switch'.");
+        self.expression();
+        self.consume(TK::RightParen, "Expect ')' after 'switch' value.");
+        self.consume(TK::LeftBrace, "Expect '{' before 'switch' body.");
+
+        let mut end_jumps = vec![];
+        let mut had_default = false;
+
+        while !self.check(TK::RightBrace) {
+            if had_default {
+                self.error_at_current("No 'case' or 'default' allowed after 'default' branch.");
+            }
+
+            self.emit_byte(OpCode::Dup); // Get a copy of the switch value for comparison
+
+            let miss_jump = if self.match_(TK::Case) {
+                self.expression();
+                self.consume(TK::Colon, "Expect ':' after 'case' value.");
+                self.emit_byte(OpCode::Equal);
+                let jump = self.emit_jump(OpCode::JumpIfFalse);
+                self.emit_byte(OpCode::Pop); // Get rid of the 'true' of the comparison
+                Some(jump)
+            } else {
+                self.consume(TK::Default, "Expect 'case' or 'default'.");
+                self.consume(TK::Colon, "Expect ':' after 'default'.");
+                had_default = true;
+                None
+            };
+
+            while !self.check(TK::RightBrace) && !self.check(TK::Case) && !self.check(TK::Default) {
+                self.statement();
+            }
+
+            end_jumps.push(self.emit_jump(OpCode::Jump));
+
+            if let Some(miss_jump) = miss_jump {
+                self.patch_jump(miss_jump);
+                self.emit_byte(OpCode::Pop); // Get rid of the 'false' of the comparison
+            }
+        }
+
+        for end_jump in end_jumps {
+            self.patch_jump(end_jump);
+        }
+        self.emit_byte(OpCode::Pop); // Get rid of the switch value
+
+        self.consume(TK::RightBrace, "Expect '}' after 'switch' body.");
+    }
+
     pub(super) fn declaration(&mut self) {
         if self.match_(TK::Var) {
             self.var_declaration(true);
@@ -193,6 +243,8 @@ impl<'a> Compiler<'a> {
             self.if_statement();
         } else if self.match_(TK::While) {
             self.while_statement();
+        } else if self.match_(TK::Switch) {
+            self.switch_statement();
         } else if self.match_(TK::LeftBrace) {
             self.begin_scope();
             self.block();

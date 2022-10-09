@@ -14,6 +14,7 @@ pub enum TokenKind {
     RightParen,
     LeftBrace,
     RightBrace,
+    Colon,
     Comma,
     Dot,
     Minus,
@@ -39,7 +40,9 @@ pub enum TokenKind {
 
     // Keywords.
     And,
+    Case,
     Class,
+    Default,
     Else,
     False,
     For,
@@ -49,6 +52,7 @@ pub enum TokenKind {
     Or,
     Print,
     Return,
+    Switch,
     Super,
     This,
     True,
@@ -105,6 +109,7 @@ impl<'a> Scanner<'a> {
         let token_kind = match self.advance() {
             None => TK::Eof,
             Some(c) => match c {
+                b':' => TK::Colon,
                 b'(' => TK::LeftParen,
                 b')' => TK::RightParen,
                 b'{' => TK::LeftBrace,
@@ -254,10 +259,12 @@ impl<'a> Scanner<'a> {
         match self.source[self.start] {
             b'a' => self.check_keyword(1, "nd", TokenKind::And),
             b'c' => match self.source.get(self.start + 1) {
+                Some(b'a') => self.check_keyword(2, "se", TokenKind::Case),
                 Some(b'l') => self.check_keyword(2, "ass", TokenKind::Class),
                 Some(b'o') => self.check_keyword(2, "nst", TokenKind::Const),
                 _ => TokenKind::Identifier,
             },
+            b'd' => self.check_keyword(1, "efault", TokenKind::Default),
             b'e' => self.check_keyword(1, "lse", TokenKind::Else),
             b'f' => match self.source.get(self.start + 1) {
                 Some(b'a') => self.check_keyword(2, "lse", TokenKind::False),
@@ -270,7 +277,11 @@ impl<'a> Scanner<'a> {
             b'o' => self.check_keyword(1, "r", TokenKind::Or),
             b'p' => self.check_keyword(1, "rint", TokenKind::Print),
             b'r' => self.check_keyword(1, "eturn", TokenKind::Return),
-            b's' => self.check_keyword(1, "uper", TokenKind::Super),
+            b's' => match self.source.get(self.start + 1) {
+                Some(b'u') => self.check_keyword(2, "per", TokenKind::Super),
+                Some(b'w') => self.check_keyword(2, "itch", TokenKind::Switch),
+                _ => TokenKind::Identifier,
+            },
             b't' => match self.source.get(self.start + 1) {
                 Some(b'h') => self.check_keyword(2, "is", TokenKind::This),
                 Some(b'r') => self.check_keyword(2, "ue", TokenKind::True),

@@ -92,6 +92,14 @@ impl VM {
                 OpCode::Pop => {
                     self.stack.pop().expect("stack underflow in OP_POP");
                 }
+                OpCode::Dup => {
+                    self.stack.push(
+                        self.stack
+                            .last()
+                            .expect("stack underflow in OP_DUP")
+                            .clone(),
+                    );
+                }
                 op @ (OpCode::GetLocal | OpCode::GetLocalLong) => {
                     let slot = if op == OpCode::GetLocalLong {
                         self.read_24bit_number(

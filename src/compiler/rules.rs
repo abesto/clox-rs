@@ -58,7 +58,7 @@ macro_rules! make_rules {
     }};
 }
 
-pub(super) type Rules<'a> = [Rule<'a>; 43];
+pub(super) type Rules<'a> = [Rule<'a>; 47];
 
 // Can't be a static value because the associated function types include lifetimes
 #[rustfmt::skip]
@@ -70,8 +70,10 @@ pub(super) fn make_rules<'a>() -> Rules<'a> {
         RightParen   = [None,     None,   None],
         LeftBrace    = [None,     None,   None],
         RightBrace   = [None,     None,   None],
+        Colon        = [None,     None,   None],
         Comma        = [None,     None,   None],
         Const        = [None,     None,   None],
+        Default      = [None,     None,   None],
         Dot          = [None,     None,   None],
         Minus        = [unary,    binary, Term],
         Plus         = [None,     binary, Term],
@@ -90,6 +92,7 @@ pub(super) fn make_rules<'a>() -> Rules<'a> {
         String       = [string,   None,   None],
         Number       = [number,   None,   None],
         And          = [None,     and,    And],
+        Case         = [None,     None,   None],
         Class        = [None,     None,   None],
         Else         = [None,     None,   None],
         False        = [literal,  None,   None],
@@ -100,6 +103,7 @@ pub(super) fn make_rules<'a>() -> Rules<'a> {
         Or           = [None,     or,     Or],
         Print        = [None,     None,   None],
         Return       = [None,     None,   None],
+        Switch       = [None,     None,   None],
         Super        = [None,     None,   None],
         This         = [None,     None,   None],
         True         = [literal,  None,   None],
