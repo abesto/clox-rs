@@ -1,0 +1,4 @@
+switch(1) {
+    default: print 1;
+    case 2: print 2; // Error at 'case': No 'case' or 'default' allowed after 'default' branch.
+}

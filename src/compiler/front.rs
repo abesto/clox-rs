@@ -205,9 +205,8 @@ impl<'a> Compiler<'a> {
                 self.error_at_current("No 'case' or 'default' allowed after 'default' branch.");
             }
 
-            self.emit_byte(OpCode::Dup); // Get a copy of the switch value for comparison
-
             let miss_jump = if self.match_(TK::Case) {
+                self.emit_byte(OpCode::Dup); // Get a copy of the switch value for comparison
                 self.expression();
                 self.consume(TK::Colon, "Expect ':' after 'case' value.");
                 self.emit_byte(OpCode::Equal);

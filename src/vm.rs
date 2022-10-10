@@ -58,13 +58,18 @@ impl VM {
     }
 
     pub fn interpret(&mut self, source: &[u8]) -> InterpretResult {
-        if let Some(chunk) = Compiler::compile(source) {
+        let result = if let Some(chunk) = Compiler::compile(source) {
             self.chunk = Some(chunk);
             self.ip = 0;
             self.run()
         } else {
             InterpretResult::CompileError
+        };
+
+        if result == InterpretResult::Ok {
+            assert_eq!(self.stack.len(), 0);
         }
+        result
     }
 
     fn run(&mut self) -> InterpretResult {

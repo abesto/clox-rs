@@ -1,0 +1,13 @@
+const x = 10;
+
+switch(x * 2) {
+    case 10: print "wrong";
+    case 11: print "still wrong";
+    case 12:
+        print "omg";
+        print x;
+    case 13: print "also wrong";
+    default:
+        print "default!"; // expect: default!
+        print x; // expect: 10
+}

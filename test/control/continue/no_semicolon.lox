@@ -1,0 +1,4 @@
+while (true) {
+    continue
+    var x;  // Error at 'var': Expect ';' after 'continue'.
+}

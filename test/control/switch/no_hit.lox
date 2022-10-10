@@ -1,0 +1,8 @@
+const x = 10;
+
+switch(x / 2) {
+    case 10:
+        print "wrong";
+    case 12:
+        print "also wrong";
+}

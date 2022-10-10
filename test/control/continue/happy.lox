@@ -1,0 +1,16 @@
+for (var i = 0; i < 10; i = i + 1) {
+    if (i < 9) {
+        continue;
+    }
+    var j = 0;
+    while (j < 9) {
+        j = j + 1;
+        if (j < 9) {
+            continue;
+        }
+        print "inner"; // expect: inner
+        print j; // expect: 9
+    }
+    print "outer"; // expect: outer
+    print i; // expect: 9
+}

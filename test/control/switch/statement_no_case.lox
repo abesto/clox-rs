@@ -1,0 +1,3 @@
+switch(x) {
+    print "syntax error yo"; // Error at 'print': Expect 'case' or 'default'.
+}
