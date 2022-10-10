@@ -6,16 +6,28 @@ mod variables;
 
 use std::collections::HashMap;
 
+use shrinkwraprs::Shrinkwrap;
+
 use crate::{
-    chunk::{Chunk, ConstantLongIndex},
+    chunk::{Chunk, CodeOffset, ConstantLongIndex},
     compiler::rules::{make_rules, Rules},
     scanner::{Scanner, Token, TokenKind},
 };
 
+#[derive(Shrinkwrap, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+#[shrinkwrap(mutable)]
+struct ScopeDepth(i32);
+
 struct Local<'a> {
     name: Token<'a>,
-    depth: i32,
+    depth: ScopeDepth,
     mutable: bool,
+}
+
+#[derive(Copy, Clone)]
+struct LoopState {
+    depth: ScopeDepth,
+    start: CodeOffset,
 }
 
 pub struct Compiler<'a> {
@@ -28,7 +40,8 @@ pub struct Compiler<'a> {
     globals_by_name: HashMap<String, ConstantLongIndex>,
     rules: Rules<'a>,
     locals: Vec<Local<'a>>,
-    scope_depth: i32,
+    scope_depth: ScopeDepth,
+    loop_state: Option<LoopState>,
 }
 
 impl<'a> Compiler<'a> {
@@ -44,7 +57,8 @@ impl<'a> Compiler<'a> {
             panic_mode: false,
             rules: make_rules(),
             locals: Vec::new(),
-            scope_depth: 0,
+            scope_depth: ScopeDepth(0),
+            loop_state: None,
         }
     }
 
@@ -78,5 +92,9 @@ impl<'a> Compiler<'a> {
 
     pub(super) fn current_chunk(&mut self) -> &mut Chunk {
         &mut self.chunk
+    }
+
+    pub(super) fn current_chunk_len(&mut self) -> usize {
+        self.current_chunk().code().len()
     }
 }

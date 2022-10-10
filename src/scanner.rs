@@ -42,6 +42,7 @@ pub enum TokenKind {
     And,
     Case,
     Class,
+    Continue,
     Default,
     Else,
     False,
@@ -261,7 +262,14 @@ impl<'a> Scanner<'a> {
             b'c' => match self.source.get(self.start + 1) {
                 Some(b'a') => self.check_keyword(2, "se", TokenKind::Case),
                 Some(b'l') => self.check_keyword(2, "ass", TokenKind::Class),
-                Some(b'o') => self.check_keyword(2, "nst", TokenKind::Const),
+                Some(b'o') => match self.source.get(self.start + 2) {
+                    Some(b'n') => match self.source.get(self.start + 3) {
+                        Some(b's') => self.check_keyword(4, "t", TokenKind::Const),
+                        Some(b't') => self.check_keyword(4, "inue", TokenKind::Continue),
+                        _ => TokenKind::Identifier,
+                    },
+                    _ => TokenKind::Identifier,
+                },
                 _ => TokenKind::Identifier,
             },
             b'd' => self.check_keyword(1, "efault", TokenKind::Default),

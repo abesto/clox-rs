@@ -1,4 +1,4 @@
-use super::{rules::Precedence, Compiler};
+use super::{rules::Precedence, Compiler, LoopState};
 use crate::{
     chunk::{CodeOffset, OpCode},
     scanner::TokenKind as TK,
@@ -104,7 +104,17 @@ impl<'a> Compiler<'a> {
             self.expression_statement();
         }
 
-        let mut loop_start = CodeOffset(self.current_chunk().code().len());
+        let old_loop_state = {
+            let start = CodeOffset(self.current_chunk_len());
+            std::mem::replace(
+                &mut self.loop_state,
+                Some(LoopState {
+                    depth: self.scope_depth,
+                    start,
+                }),
+            )
+        };
+
         let mut exit_jump = None;
         if !self.match_(TK::Semicolon) {
             self.expression();
@@ -115,24 +125,25 @@ impl<'a> Compiler<'a> {
 
         if !self.match_(TK::RightParen) {
             let body_jump = self.emit_jump(OpCode::Jump);
-            let increment_start = CodeOffset(self.current_chunk().code().len());
+            let increment_start = CodeOffset(self.current_chunk_len());
             self.expression();
             self.emit_byte(OpCode::Pop);
             self.consume(TK::RightParen, "Expect ')' after for clauses.");
 
-            self.emit_loop(loop_start);
-            loop_start = increment_start;
+            self.emit_loop(self.loop_state.as_ref().unwrap().start);
+            self.loop_state.as_mut().unwrap().start = increment_start;
             self.patch_jump(body_jump);
         }
 
         self.statement();
-        self.emit_loop(loop_start);
+        self.emit_loop(self.loop_state.as_ref().unwrap().start);
 
         if let Some(exit_jump) = exit_jump {
             self.patch_jump(exit_jump);
             self.emit_byte(OpCode::Pop);
         }
 
+        self.loop_state = old_loop_state;
         self.end_scope();
     }
 
@@ -156,7 +167,16 @@ impl<'a> Compiler<'a> {
     }
 
     fn while_statement(&mut self) {
-        let loop_start = CodeOffset(self.current_chunk().code().len());
+        let old_loop_state = {
+            let start = CodeOffset(self.current_chunk_len());
+            std::mem::replace(
+                &mut self.loop_state,
+                Some(LoopState {
+                    depth: self.scope_depth,
+                    start,
+                }),
+            )
+        };
         self.consume(TK::LeftParen, "Expect '(' after 'while'.");
         self.expression();
         self.consume(TK::RightParen, "Expect ')' after condition.");
@@ -164,10 +184,11 @@ impl<'a> Compiler<'a> {
         let exit_jump = self.emit_jump(OpCode::JumpIfFalse);
         self.emit_byte(OpCode::Pop);
         self.statement();
-        self.emit_loop(loop_start);
+        self.emit_loop(self.loop_state.as_ref().unwrap().start);
 
         self.patch_jump(exit_jump);
         self.emit_byte(OpCode::Pop);
+        self.loop_state = old_loop_state;
     }
 
     fn switch_statement(&mut self) {
@@ -220,6 +241,27 @@ impl<'a> Compiler<'a> {
         self.consume(TK::RightBrace, "Expect '}' after 'switch' body.");
     }
 
+    fn continue_statement(&mut self) {
+        match self.loop_state {
+            None => self.error("'continue' outside a loop."),
+            Some(state) => {
+                self.consume(TK::Semicolon, "Expect ';' after 'continue'.");
+
+                let locals_to_drop = self
+                    .locals
+                    .iter()
+                    .rev()
+                    .take_while(|local| local.depth > state.depth)
+                    .count();
+                for _ in 0..locals_to_drop {
+                    self.emit_byte(OpCode::Pop);
+                }
+
+                self.emit_loop(state.start);
+            }
+        }
+    }
+
     pub(super) fn declaration(&mut self) {
         if self.match_(TK::Var) {
             self.var_declaration(true);
@@ -245,6 +287,8 @@ impl<'a> Compiler<'a> {
             self.while_statement();
         } else if self.match_(TK::Switch) {
             self.switch_statement();
+        } else if self.match_(TK::Continue) {
+            self.continue_statement();
         } else if self.match_(TK::LeftBrace) {
             self.begin_scope();
             self.block();

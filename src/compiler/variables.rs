@@ -1,15 +1,15 @@
 use crate::chunk::{ConstantLongIndex, OpCode};
 
-use super::{Compiler, Local};
+use super::{Compiler, Local, ScopeDepth};
 use crate::scanner::{Token, TokenKind as TK};
 
 impl<'a> Compiler<'a> {
     pub(super) fn begin_scope(&mut self) {
-        self.scope_depth += 1;
+        *self.scope_depth += 1;
     }
 
     pub(super) fn end_scope(&mut self) {
-        self.scope_depth -= 1;
+        *self.scope_depth -= 1;
         while self
             .locals
             .last()
@@ -43,7 +43,7 @@ impl<'a> Compiler<'a> {
             } else {
                 let local_index = local_index.unwrap();
                 let local = &self.locals[local_index];
-                if local.depth != -1 && !local.mutable {
+                if *local.depth != -1 && !local.mutable {
                     self.error("Reassignment to local 'const'.");
                 }
                 if local_index > u8::MAX.into() {
@@ -80,10 +80,10 @@ impl<'a> Compiler<'a> {
     {
         let name = name.to_string();
         if let Some(index) = self.globals_by_name.get(&name) {
-            index.clone()
+            *index
         } else {
             let index = self.current_chunk().make_constant(name.to_string().into());
-            self.globals_by_name.insert(name, index.clone());
+            self.globals_by_name.insert(name, index);
             index
         }
     }
@@ -101,7 +101,7 @@ impl<'a> Compiler<'a> {
             .rev()
             .find(|(_, local)| local.name.lexeme == name)
             .map(|(index, local)| {
-                if local.depth == -1 {
+                if *local.depth == -1 {
                     self.locals.len()
                 } else {
                     index
@@ -120,19 +120,19 @@ impl<'a> Compiler<'a> {
         }
         self.locals.push(Local {
             name,
-            depth: -1,
+            depth: ScopeDepth(-1),
             mutable,
         });
     }
 
     pub(super) fn declare_variable(&mut self, mutable: bool) {
-        if self.scope_depth == 0 {
+        if *self.scope_depth == 0 {
             return;
         }
 
         let name = self.previous.clone().unwrap();
         if self.locals.iter().rev().any(|local| {
-            if local.depth != -1 && local.depth < self.scope_depth {
+            if *local.depth != -1 && local.depth < self.scope_depth {
                 false
             } else {
                 local.name.lexeme == name.lexeme
@@ -148,7 +148,7 @@ impl<'a> Compiler<'a> {
         self.consume(TK::Identifier, msg);
 
         self.declare_variable(mutable);
-        if self.scope_depth > 0 {
+        if *self.scope_depth > 0 {
             None
         } else {
             Some(self.identifier_constant(self.previous.as_ref().unwrap().as_str().to_string()))
@@ -163,7 +163,7 @@ impl<'a> Compiler<'a> {
 
     pub(super) fn define_variable(&mut self, global: Option<ConstantLongIndex>, mutable: bool) {
         if global.is_none() {
-            assert!(self.scope_depth > 0);
+            assert!(*self.scope_depth > 0);
             self.mark_initialized();
             return;
         }

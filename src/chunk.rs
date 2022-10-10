@@ -4,14 +4,14 @@ use shrinkwraprs::Shrinkwrap;
 
 use crate::{types::Line, value::Value};
 
-#[derive(Shrinkwrap)]
+#[derive(Shrinkwrap, Clone, Copy)]
 #[shrinkwrap(mutable)]
 pub struct CodeOffset(pub usize);
 
-#[derive(Shrinkwrap)]
+#[derive(Shrinkwrap, Clone, Copy)]
 pub struct ConstantIndex(pub u8);
 
-#[derive(Shrinkwrap, Clone)]
+#[derive(Shrinkwrap, Clone, Copy)]
 pub struct ConstantLongIndex(pub usize);
 
 #[derive(IntoPrimitive, TryFromPrimitive, PartialEq, Eq, Debug, Clone, Copy)]
