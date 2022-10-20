@@ -36,7 +36,8 @@ impl<'a> Compiler<'a> {
     where
         T: Into<Value>,
     {
-        if !self.chunk.write_constant(value.into(), self.line()) {
+        let line = self.line();
+        if !self.current_chunk().write_constant(value.into(), line) {
             self.error("Too many constants in one chunk.");
         }
     }

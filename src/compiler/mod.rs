@@ -12,6 +12,8 @@ use crate::{
     chunk::{Chunk, CodeOffset, ConstantLongIndex},
     compiler::rules::{make_rules, Rules},
     scanner::{Scanner, Token, TokenKind},
+    types::Line,
+    value::Function,
 };
 
 #[derive(Shrinkwrap, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
@@ -25,6 +27,12 @@ struct Local<'a> {
 }
 
 #[derive(Copy, Clone)]
+enum FunctionType {
+    Function,
+    Script,
+}
+
+#[derive(Copy, Clone)]
 struct LoopState {
     depth: ScopeDepth,
     start: CodeOffset,
@@ -34,9 +42,13 @@ pub struct Compiler<'a> {
     scanner: Scanner<'a>,
     previous: Option<Token<'a>>,
     current: Option<Token<'a>>,
+
     had_error: bool,
     panic_mode: bool,
-    chunk: Chunk,
+
+    function: Function,
+    function_type: FunctionType,
+
     globals_by_name: HashMap<String, ConstantLongIndex>,
     rules: Rules<'a>,
     locals: Vec<Local<'a>>,
@@ -47,8 +59,9 @@ pub struct Compiler<'a> {
 impl<'a> Compiler<'a> {
     #[must_use]
     fn new(source: &'a [u8]) -> Self {
-        Self {
-            chunk: Chunk::new("<main>"),
+        let mut compiler = Self {
+            function: Function::new(0, "<script>"),
+            function_type: FunctionType::Script,
             globals_by_name: HashMap::new(),
             scanner: Scanner::new(source),
             previous: None,
@@ -59,10 +72,22 @@ impl<'a> Compiler<'a> {
             locals: Vec::new(),
             scope_depth: ScopeDepth(0),
             loop_state: None,
-        }
+        };
+
+        compiler.locals.push(Local {
+            name: Token {
+                kind: TokenKind::Identifier,
+                lexeme: &[],
+                line: Line(0),
+            },
+            depth: ScopeDepth(0),
+            mutable: false,
+        });
+
+        compiler
     }
 
-    fn compile_(mut self) -> Option<Chunk> {
+    fn compile_(mut self) -> Option<Function> {
         self.advance();
 
         while !self.match_(TokenKind::Eof) {
@@ -73,11 +98,11 @@ impl<'a> Compiler<'a> {
         if self.had_error {
             None
         } else {
-            Some(self.chunk)
+            Some(self.function)
         }
     }
 
-    pub fn compile(source: &'a [u8]) -> Option<Chunk> {
+    pub fn compile(source: &'a [u8]) -> Option<Function> {
         Self::new(source).compile_()
     }
 
@@ -91,7 +116,7 @@ impl<'a> Compiler<'a> {
     }
 
     pub(super) fn current_chunk(&mut self) -> &mut Chunk {
-        &mut self.chunk
+        &mut self.function.chunk
     }
 
     pub(super) fn current_chunk_len(&mut self) -> usize {

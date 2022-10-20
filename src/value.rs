@@ -56,9 +56,9 @@ impl Value {
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub struct Function {
-    arity: usize,
-    chunk: Chunk,
-    name: String,
+    pub arity: usize,
+    pub chunk: Chunk,
+    pub name: String,
 }
 
 impl Function {
