@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::chunk::Chunk;
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
@@ -8,7 +10,7 @@ pub enum Value {
     Number(f64),
 
     String(Box<String>),
-    Function(Box<Function>),
+    Function(Rc<RefCell<Function>>),
 }
 
 impl From<bool> for Value {
@@ -36,7 +38,7 @@ impl std::fmt::Display for Value {
             Value::Number(num) => f.pad(&format!("{}", num)),
             Value::Nil => f.pad("nil"),
             Value::String(s) => f.pad(&format!("{}", *s)),
-            Value::Function(fun) => f.pad(&format!("<fn {}>", fun.name)),
+            Value::Function(fun) => f.pad(&format!("<fn {}>", fun.borrow().name)),
         }
     }
 }

@@ -114,7 +114,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn add_local(&mut self, name: Token<'a>, mutable: bool) {
-        if self.locals.len() > usize::from(u8::MAX) + 1 {
+        if self.locals.len() > usize::pow(2, 23) {
             self.error("Too many local variables in function.");
             return;
         }

@@ -1,12 +1,19 @@
-use std::collections::HashMap;
+use std::{
+    cell::{Ref, RefCell},
+    collections::HashMap,
+    rc::Rc,
+};
 
 #[cfg(feature = "trace_execution")]
 use crate::chunk::InstructionDisassembler;
 use crate::{
-    chunk::{Chunk, CodeOffset, OpCode},
+    chunk::{CodeOffset, OpCode},
     compiler::Compiler,
-    value::Value,
+    value::{Function, Value},
 };
+
+const FRAMES_MAX: usize = 64;
+const STACK_MAX: usize = FRAMES_MAX * 255;
 
 #[derive(Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -19,7 +26,7 @@ pub enum InterpretResult {
 macro_rules! runtime_error {
     ($self:ident, $($arg:expr),* $(,)?) => {
         eprintln!($($arg),*);
-        let line = $self.chunk.as_ref().unwrap().get_line(&CodeOffset($self.ip - 1));
+        let line = $self.function().borrow().chunk.get_line(&CodeOffset($self.frame().ip - 1));
         eprintln!("[line {}] in script", *line);
     };
 }
@@ -39,9 +46,14 @@ struct Global {
     mutable: bool,
 }
 
-pub struct VM {
-    chunk: Option<Chunk>,
+pub struct CallFrame {
+    function: Rc<RefCell<Function>>,
     ip: usize,
+    stack_base: usize,
+}
+
+pub struct VM {
+    frames: Vec<CallFrame>,
     stack: Vec<Value>,
     globals: HashMap<String, Global>,
 }
@@ -50,24 +62,28 @@ impl VM {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            chunk: None,
-            ip: 0,
-            stack: Vec::with_capacity(256),
+            frames: Vec::with_capacity(FRAMES_MAX),
+            stack: Vec::with_capacity(STACK_MAX),
             globals: HashMap::new(),
         }
     }
 
     pub fn interpret(&mut self, source: &[u8]) -> InterpretResult {
-        let result = if let Some(chunk) = Compiler::compile(source) {
-            self.chunk = Some(chunk);
-            self.ip = 0;
+        let result = if let Some(function) = Compiler::compile(source) {
+            let function = Rc::new(RefCell::new(function));
+            self.frames.push(CallFrame {
+                function: Rc::clone(&function),
+                ip: 0,
+                stack_base: 0,
+            });
+            self.stack_push(Value::Function(function));
             self.run()
         } else {
             InterpretResult::CompileError
         };
 
         if result == InterpretResult::Ok {
-            assert_eq!(self.stack.len(), 0);
+            assert_eq!(self.stack.len(), 1);
         }
         result
     }
@@ -78,8 +94,8 @@ impl VM {
             let instruction = self.read_byte("instruction");
             #[cfg(feature = "trace_execution")]
             {
-                let mut disassembler = InstructionDisassembler::new(&self.chunk.as_ref().unwrap());
-                *disassembler.offset = self.ip - 1;
+                let mut disassembler = InstructionDisassembler::new(&self.chunk());
+                *disassembler.offset = self.frame().ip - 1;
                 println!(
                     "          [{}]",
                     self.stack
@@ -98,7 +114,7 @@ impl VM {
                     self.stack.pop().expect("stack underflow in OP_POP");
                 }
                 OpCode::Dup => {
-                    self.stack.push(
+                    self.stack_push(
                         self.stack
                             .last()
                             .expect("stack underflow in OP_DUP")
@@ -115,8 +131,8 @@ impl VM {
                             self.read_byte("Internal error: missing operand for OP_GET_LOCAL"),
                         )
                     };
-                    let value = self.stack[slot].clone();
-                    self.stack.push(value);
+                    let value = self.stack_get(slot).clone();
+                    self.stack_push(value);
                 }
                 op @ (OpCode::SetLocal | OpCode::SetLocalLong) => {
                     let slot = if op == OpCode::GetLocalLong {
@@ -128,7 +144,7 @@ impl VM {
                             self.read_byte("Internal error: missing operand for OP_SET_LOCAL"),
                         )
                     };
-                    self.stack[slot] = self
+                    *self.stack_get_mut(slot) = self
                         .stack
                         .last()
                         .expect("stack underflow in OP_SET_LOCAL")
@@ -137,7 +153,7 @@ impl VM {
                 op @ (OpCode::GetGlobal | OpCode::GetGlobalLong) => {
                     match self.read_constant(op == OpCode::GetGlobalLong).clone() {
                         Value::String(name) => match self.globals.get(&*name) {
-                            Some(global) => self.stack.push(global.value.clone()),
+                            Some(global) => self.stack_push(global.value.clone()),
                             None => {
                                 runtime_error!(self, "Undefined variable '{}'.", name);
                                 return InterpretResult::RuntimeError;
@@ -205,33 +221,33 @@ impl VM {
                         .expect("stack underflow in OP_JUMP_IF_FALSE")
                         .is_falsey()
                     {
-                        self.ip += offset;
+                        self.frame_mut().ip += offset;
                     }
                 }
                 OpCode::Jump => {
                     let offset =
                         self.read_16bit_number("Internal error: missing operand for OP_JUMP");
-                    self.ip += offset;
+                    self.frame_mut().ip += offset;
                 }
                 OpCode::Loop => {
                     let offset =
                         self.read_16bit_number("Internal error: missing operand for OP_+loop");
-                    self.ip -= offset;
+                    self.frame_mut().ip -= offset;
                 }
                 OpCode::Return => {
                     return InterpretResult::Ok;
                 }
                 OpCode::Constant => {
                     let value = self.read_constant(false).clone();
-                    self.stack.push(value);
+                    self.stack_push(value);
                 }
                 OpCode::ConstantLong => {
                     let value = self.read_constant(true).clone();
-                    self.stack.push(value);
+                    self.stack_push(value);
                 }
-                OpCode::Nil => self.stack.push(Value::Nil),
-                OpCode::True => self.stack.push(Value::Bool(true)),
-                OpCode::False => self.stack.push(Value::Bool(false)),
+                OpCode::Nil => self.stack_push(Value::Nil),
+                OpCode::True => self.stack_push(Value::Bool(true)),
+                OpCode::False => self.stack_push(Value::Bool(false)),
 
                 OpCode::Negate => {
                     let value = self.stack.last_mut().expect("stack underflow in OP_NEGATE");
@@ -249,7 +265,7 @@ impl VM {
                         .pop()
                         .expect("stack underflow in OP_NOT")
                         .is_falsey();
-                    self.stack.push(value.into());
+                    self.stack_push(value.into());
                 }
 
                 OpCode::Equal => {
@@ -261,7 +277,7 @@ impl VM {
                             .stack
                             .pop()
                             .expect("stack underflow in OP_EQUAL (second)");
-                    self.stack.push(value.into());
+                    self.stack_push(value.into());
                 }
 
                 OpCode::Add => {
@@ -293,16 +309,14 @@ impl VM {
     }
 
     fn read_byte(&mut self, msg: &str) -> u8 {
-        self.ip += 1;
-        *self.get_byte(self.ip - 1).expect(msg)
+        let frame = self.frame_mut();
+        frame.ip += 1;
+        let index = frame.ip - 1;
+        self.get_byte(index).expect(msg)
     }
 
-    fn get_byte(&self, index: usize) -> Option<&u8> {
-        self.chunk
-            .as_ref()
-            .expect("no chunk in get_byte o.0")
-            .code()
-            .get(index)
+    fn get_byte(&self, index: usize) -> Option<u8> {
+        self.function().borrow().chunk.code().get(index).cloned()
     }
 
     fn read_24bit_number(&mut self, msg: &str) -> usize {
@@ -315,13 +329,13 @@ impl VM {
         (usize::from(self.read_byte(msg)) << 8) + (usize::from(self.read_byte(msg)))
     }
 
-    fn read_constant(&mut self, long: bool) -> &Value {
+    fn read_constant(&mut self, long: bool) -> Value {
         let index = if long {
             self.read_24bit_number("read_constant/long")
         } else {
             usize::from(self.read_byte("read_constant"))
         };
-        self.chunk.as_ref().unwrap().get_constant(index)
+        self.function().borrow().chunk.get_constant(index).clone()
     }
 
     fn binary_op<T: Into<Value>>(&mut self, op: BinaryOp<T>) -> bool {
@@ -337,5 +351,40 @@ impl VM {
             }
         }
         true
+    }
+
+    fn stack_push(&mut self, value: Value) {
+        if self.stack.len() == STACK_MAX {
+            runtime_error!(self, "Stack overflow");
+        } else {
+            self.stack.push(value);
+        }
+    }
+
+    fn stack_get(&self, slot: usize) -> &Value {
+        &self.stack[self.stack_base() + slot]
+    }
+
+    fn stack_get_mut(&mut self, slot: usize) -> &mut Value {
+        let offset = self.stack_base();
+        &mut self.stack[offset + slot]
+    }
+
+    fn frame(&self) -> &CallFrame {
+        self.frames.last().expect("Out of call frames, somehow?")
+    }
+
+    fn frame_mut(&mut self) -> &mut CallFrame {
+        self.frames
+            .last_mut()
+            .expect("Out of call frames, somehow?")
+    }
+
+    fn stack_base(&self) -> usize {
+        self.frame().stack_base
+    }
+
+    fn function(&self) -> Rc<RefCell<Function>> {
+        Rc::clone(&self.frame().function)
     }
 }

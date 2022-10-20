@@ -4,17 +4,20 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * `Chunk` / `OpCode` memory layout: initially I wanted to use a `#[repr(C, u8)]` enum, with operators that have operands encoded as fields of the enum variant. Even in the simplest case, `std::mem::size_of` said that takes up 16 bytes. That is WAY too much, so we'll do the same kind of tight, manual packing that the C implementation uses.
 * `debug.rs`: implemented the `disassemble*` functions as `impl Debug for Chunk`. An implication of this is that all `Chunk`s store a `name`, which is probably a good idea anyway.
   * `Debug` for specific instructions is implemented with a helper struct `InstructionDisassembler` that wraps a `Chunk` reference and an offset. This also allows fully consistent formatting from `Chunk::debug` and execution tracing.
-  * `(int)(vm.ip - vm.chunk->code)` has no translation into Rust. I tried making `VM::ip` an iterator over `(code_offset, instruction)`, but that leads to lifetime nightmares. For now we go with a simple index here.
   * Serialization of the opcodes is exactly as seen in the C version, even though the specific strings don't actually map exactly to our code (i.e. `OP_NIL` instead of `OpCode::Nil`). This is to stay compatible with the books output; plus, I like the aesthetic!
+* Translating stored pointers and pointer operations to Rust is always interesting:
+  * `(int)(vm.ip - vm.chunk->code)` has no translation into Rust. I tried making `VM::ip` an iterator over `(code_offset, instruction)`, but that leads to lifetime nightmares. For now we go with a simple index here.
+  * `Token`s store the "pointer" to the lexeme as a slice.
+  * `CallFrame::slots` is a `Value*` in C; a direct translation would be a slice into `VM::stack`, but I can't easily sort out the lifetimes there. So: simple index again! I keep wondering about the performance.
 * `#define`-controlled features translate to Cargo features
 * `VM::binary_op` is a higher-order function instead of a macro; hopefully this will be good enough later on.
-* `Token`s store the "pointer" to the lexeme as a slice.
 * Unlike [`jlox-rs`](https://github.com/abesto/jlox-rs/), error reporting on initial implementation follows closely the error reporting logic of the book so that I have less to mentally juggle. Might end up refactoring afterwards to use `Result`s.
 * `Scanner`: the `start` / `current` pointer pair is implemented with indices and slices. Using iterators *may* be more performant, and there may be a way to do that, but timed out on it for now.
 * The Pratt parser table creation is a bit of a mess due to 1. constraints on array initialization and 2. lifetimes. We create a new instance of the table for each `Compiler` instance, because the compiler instance has a lifetime, and its associated methods capture that lifetime, and so the function references must also capture that same lifetime.
 * There's a lot of `self.previous.as_ref().unwrap()` in `Compiler`. There should be a way to get rid of those `Option`s. I think.
 * By chapter 19, the book is making a lot of forward references to a garbage collector. While that sounds exciting, I think... we won't... need it? Because the Rust memory management structures we use (basically, `Box` / `String` + `Drop`) ensure we never leak memory? Except, this will probably get a ton more complicated the moment we start in on variables and classes. Let's see what happens.
 * Completely skipped chapter 20 (Hash Tables) because we have them in Rust (also mostly skipped the part where we rebuild `Box`).
+* `StackFrame::function` is a pointer to an `ObjFunction` in C. In Rust, we can't "just" stuff in a pointer. At a first approximation, I'll use `Rc<RefCell>` for storing `Function` instances. I considered `Weak` for storage in `CallFrame`s, but it doesn't really give any performance improvements I think (they need to be `updrade`ed when used *anyway*).
 
 # TODO
 
@@ -34,7 +37,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * TODO ternary operator
 * STRETCH: add error handling to user code
 * TODO add a `Value` variant that holds a reference to a string value kept alive somewhere else (Chapter 19)
-  * Doing this with lifetimes seems (almost?) impossible: `VM` has both a `Chunk` and a stack, and its stack may have values from multiple chunks, so there's no good `a` for a `Value<'a>`. `Rc` is probably a sane solution to this, but I want to see what future memory management shenanigans we get up to before implementing this.
+  * Doing this with lifetimes seems (almost?) impossible: `VM` has both a `Chunk` and a stack, and its stack may have values from multiple chunks, so there's no good `a` for a `Value<'a>`. `Rc` is probably a sane solution to this, but I want to see what future memory management shenanigans we get up to before implementing this. This will probably end up as an arena once I get to GC.
 
 # Dependencies
 
