@@ -339,6 +339,8 @@ impl<'a> Compiler<'a> {
             self.for_statement();
         } else if self.match_(TK::If) {
             self.if_statement();
+        } else if self.match_(TK::Return) {
+            self.return_statement();
         } else if self.match_(TK::While) {
             self.while_statement();
         } else if self.match_(TK::Switch) {
@@ -358,5 +360,18 @@ impl<'a> Compiler<'a> {
         self.expression();
         self.consume(TK::Semicolon, "Expect ';' after value.");
         self.emit_byte(OpCode::Print);
+    }
+
+    fn return_statement(&mut self) {
+        if self.function_type == FunctionType::Script {
+            self.error("Can't return from top-level code.");
+        }
+        if self.match_(TK::Semicolon) {
+            self.emit_return();
+        } else {
+            self.expression();
+            self.consume(TK::Semicolon, "Expect ';' after return value.");
+            self.emit_byte(OpCode::Return);
+        }
     }
 }

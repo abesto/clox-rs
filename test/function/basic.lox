@@ -1,6 +1,8 @@
 fun f(a, b, c) {
-    print a;
+    print a; // expect: foo
+    return c;
+    print b;
 }
 
 var x = f("foo", "bar", "baz");
-print x;
+print x; // expect: baz

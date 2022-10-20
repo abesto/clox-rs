@@ -26,7 +26,7 @@ struct Local<'a> {
     mutable: bool,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 enum FunctionType {
     Function,
     Script,
