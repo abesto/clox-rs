@@ -1,0 +1,6 @@
+fun f(a, b, c) {
+    print a;
+}
+
+var x = f("foo", "bar", "baz");
+print x;

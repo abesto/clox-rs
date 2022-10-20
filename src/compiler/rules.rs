@@ -59,15 +59,13 @@ macro_rules! make_rules {
     }};
 }
 
-pub(super) type Rules<'a> = [Rule<'a>; 48];
+pub(super) type Rules<'a> = [Rule<'a>; 46];
 
 // Can't be a static value because the associated function types include lifetimes
 #[rustfmt::skip]
 pub(super) fn make_rules<'a>() -> Rules<'a> {
     make_rules!(
-        LeftParen    = [grouping, None,   None],
-        RightParen   = [None,     None,   None],
-        LeftParen    = [grouping, None,   None],
+        LeftParen    = [grouping, call,   Call],
         RightParen   = [None,     None,   None],
         LeftBrace    = [None,     None,   None],
         RightBrace   = [None,     None,   None],
@@ -185,6 +183,11 @@ impl<'a> Compiler<'a> {
 
             _ => unreachable!("unknown binary operator: {}", operator),
         }
+    }
+
+    fn call(&mut self, _can_assign: bool) {
+        let arg_count = self.argument_list();
+        self.emit_bytes(OpCode::Call, arg_count);
     }
 
     fn literal(&mut self, _can_assign: bool) {

@@ -190,4 +190,22 @@ impl<'a> Compiler<'a> {
             }
         }
     }
+
+    pub(super) fn argument_list(&mut self) -> u8 {
+        let mut arg_count = 0;
+        if !self.check(TK::RightParen) {
+            loop {
+                self.expression();
+                if arg_count == 255 {
+                    self.error("Can't have more than 255 arguments.");
+                }
+                arg_count += 1;
+                if !self.match_(TK::Comma) {
+                    break;
+                }
+            }
+        }
+        self.consume(TK::RightParen, "Expect ')' after arguments.");
+        arg_count
+    }
 }

@@ -39,6 +39,7 @@ pub enum OpCode {
     Jump,
     JumpIfFalse,
     Loop,
+    Call,
 
     Nil,
     True,
@@ -68,10 +69,10 @@ impl OpCode {
         use OpCode::*;
         std::mem::size_of::<OpCode>()
             + match self {
-                Negate | Add | Subtract | Multiply | Divide | Return | Nil | True | False | Not
-                | Equal | Greater | Less | Print | Pop | Dup => 0,
+                Negate | Add | Subtract | Multiply | Divide | Nil | True | False | Not | Equal
+                | Greater | Less | Print | Pop | Dup => 0,
                 Constant | GetLocal | SetLocal | GetGlobal | SetGlobal | DefineGlobal
-                | DefineGlobalConst => 1,
+                | DefineGlobalConst | Return | Call => 1,
                 JumpIfFalse | Jump | Loop => 2,
                 ConstantLong
                 | GetGlobalLong
@@ -341,7 +342,7 @@ impl<'a> std::fmt::Debug for InstructionDisassembler<'a> {
                 GetGlobalLong,
                 SetGlobalLong
             ),
-            byte(GetLocal, SetLocal),
+            byte(GetLocal, SetLocal, Call),
             byte_long(GetLocalLong, SetLocalLong),
             jump(Jump, JumpIfFalse, Loop),
             simple(

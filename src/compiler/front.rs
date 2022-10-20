@@ -111,7 +111,6 @@ impl<'a> Compiler<'a> {
             self.previous = compiler.previous;
             self.had_error |= compiler.had_error;
             self.panic_mode |= compiler.panic_mode;
-            self.globals_by_name.extend(compiler.globals_by_name);
             compiler.current_function
         };
 

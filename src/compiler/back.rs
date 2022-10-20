@@ -29,6 +29,7 @@ impl<'a> Compiler<'a> {
     }
 
     pub(super) fn emit_return(&mut self) {
+        self.emit_byte(OpCode::Nil);
         self.emit_byte(OpCode::Return);
     }
 

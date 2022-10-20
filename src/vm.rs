@@ -1,8 +1,4 @@
-use std::{
-    cell::{Ref, RefCell},
-    collections::HashMap,
-    rc::Rc,
-};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[cfg(feature = "trace_execution")]
 use crate::chunk::InstructionDisassembler;
@@ -27,8 +23,11 @@ pub enum InterpretResult {
 macro_rules! runtime_error {
     ($self:ident, $($arg:expr),* $(,)?) => {
         eprintln!($($arg),*);
-        let line = $self.function().borrow().chunk.get_line(&CodeOffset($self.frame().ip - 1));
-        eprintln!("[line {}] in script", *line);
+        for frame in $self.frames.iter().rev() {
+            let function = frame.function.borrow();
+            let line = function.chunk.get_line(&CodeOffset(frame.ip - 1));
+            eprintln!("[line {}] in {}", *line, function.name);
+        }
     };
 }
 
@@ -73,19 +72,15 @@ impl VM {
         let scanner = Scanner::new(source);
         let result = if let Some(function) = Compiler::compile(scanner) {
             let function = Rc::new(RefCell::new(function));
-            self.frames.push(CallFrame {
-                function: Rc::clone(&function),
-                ip: 0,
-                stack_base: 0,
-            });
-            self.stack_push(Value::Function(function));
+            self.stack_push(Value::Function(Rc::clone(&function)));
+            self.call(&function, 0);
             self.run()
         } else {
             InterpretResult::CompileError
         };
 
         if result == InterpretResult::Ok {
-            assert_eq!(self.stack.len(), 1);
+            assert_eq!(self.stack.len(), 0);
         }
         result
     }
@@ -96,7 +91,9 @@ impl VM {
             let instruction = self.read_byte("instruction");
             #[cfg(feature = "trace_execution")]
             {
-                let mut disassembler = InstructionDisassembler::new(&self.chunk());
+                let function_ref = self.function();
+                let function = function_ref.borrow();
+                let mut disassembler = InstructionDisassembler::new(&function.chunk);
                 *disassembler.offset = self.frame().ip - 1;
                 println!(
                     "          [{}]",
@@ -236,8 +233,28 @@ impl VM {
                         self.read_16bit_number("Internal error: missing operand for OP_+loop");
                     self.frame_mut().ip -= offset;
                 }
+                OpCode::Call => {
+                    let arg_count = self.read_byte("Internal error: missing operand for OP_CALL");
+                    if !self.call_value(
+                        self.stack[self.stack.len() - 1 - usize::from(arg_count)].clone(),
+                        arg_count,
+                    ) {
+                        return InterpretResult::RuntimeError;
+                    }
+                }
                 OpCode::Return => {
-                    return InterpretResult::Ok;
+                    let result = self.stack.pop();
+                    self.frames
+                        .pop()
+                        .expect("Call stack underflow in OP_RETURN");
+
+                    if self.frames.is_empty() {
+                        self.stack.pop();
+                        return InterpretResult::Ok;
+                    }
+
+                    self.stack.truncate(self.frame().stack_base + 1);
+                    self.stack_push(result.expect("Stack underflow in OP_RETURN"));
                 }
                 OpCode::Constant => {
                     let value = self.read_constant(false).clone();
@@ -388,5 +405,35 @@ impl VM {
 
     fn function(&self) -> Rc<RefCell<Function>> {
         Rc::clone(&self.frame().function)
+    }
+
+    fn call_value(&mut self, callee: Value, arg_count: u8) -> bool {
+        match callee {
+            Value::Function(f) => self.call(&f, arg_count),
+            _ => {
+                runtime_error!(self, "Can only call functions and classes.");
+                false
+            }
+        }
+    }
+
+    fn call(&mut self, f: &Rc<RefCell<Function>>, arg_count: u8) -> bool {
+        let arity = f.borrow().arity;
+        if usize::from(arg_count) != arity {
+            runtime_error!(self, "Expected {} arguments but got {}.", arity, arg_count);
+            return false;
+        }
+
+        if self.frames.len() == FRAMES_MAX {
+            runtime_error!(self, "Stack overflow.");
+            return false;
+        }
+
+        self.frames.push(CallFrame {
+            function: Rc::clone(f),
+            ip: 0,
+            stack_base: self.stack.len() - usize::from(arg_count) - 1,
+        });
+        true
     }
 }
