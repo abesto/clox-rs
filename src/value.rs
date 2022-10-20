@@ -31,6 +31,12 @@ impl From<String> for Value {
     }
 }
 
+impl From<Function> for Value {
+    fn from(f: Function) -> Self {
+        Value::Function(Rc::new(RefCell::new(f)))
+    }
+}
+
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

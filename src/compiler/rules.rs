@@ -23,6 +23,7 @@ pub(super) enum Precedence {
 
 type ParseFn<'a> = fn(&mut Compiler<'a>, bool) -> ();
 
+#[derive(Clone)]
 pub(super) struct Rule<'a> {
     prefix: Option<ParseFn<'a>>,
     infix: Option<ParseFn<'a>>,

@@ -84,6 +84,7 @@ impl<'a> Token<'a> {
     }
 }
 
+#[derive(Clone)]
 pub struct Scanner<'a> {
     source: &'a [u8],
     start: usize,

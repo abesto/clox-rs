@@ -46,7 +46,7 @@ pub struct Compiler<'a> {
     had_error: bool,
     panic_mode: bool,
 
-    function: Function,
+    current_function: Function,
     function_type: FunctionType,
 
     globals_by_name: HashMap<String, ConstantLongIndex>,
@@ -58,12 +58,15 @@ pub struct Compiler<'a> {
 
 impl<'a> Compiler<'a> {
     #[must_use]
-    fn new(source: &'a [u8]) -> Self {
+    fn new<S>(scanner: Scanner<'a>, function_name: S, function_type: FunctionType) -> Self
+    where
+        S: ToString,
+    {
         let mut compiler = Self {
-            function: Function::new(0, "<script>"),
-            function_type: FunctionType::Script,
+            current_function: Function::new(0, function_name),
+            function_type,
             globals_by_name: HashMap::new(),
-            scanner: Scanner::new(source),
+            scanner,
             previous: None,
             current: None,
             had_error: false,
@@ -98,12 +101,13 @@ impl<'a> Compiler<'a> {
         if self.had_error {
             None
         } else {
-            Some(self.function)
+            Some(self.current_function)
         }
     }
 
-    pub fn compile(source: &'a [u8]) -> Option<Function> {
-        Self::new(source).compile_()
+    pub fn compile(scanner: Scanner<'a>) -> Option<Function> {
+        let compiler = Self::new(scanner, "<script>", FunctionType::Script);
+        compiler.compile_()
     }
 
     fn end(&mut self) {
@@ -111,12 +115,12 @@ impl<'a> Compiler<'a> {
 
         #[cfg(feature = "print_code")]
         if !self.had_error {
-            println!("{:?}", self.chunk);
+            println!("{:?}", self.current_chunk());
         }
     }
 
     pub(super) fn current_chunk(&mut self) -> &mut Chunk {
-        &mut self.function.chunk
+        &mut self.current_function.chunk
     }
 
     pub(super) fn current_chunk_len(&mut self) -> usize {

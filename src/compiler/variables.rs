@@ -155,7 +155,10 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn mark_initialized(&mut self) {
+    pub(super) fn mark_initialized(&mut self) {
+        if *self.scope_depth == 0 {
+            return;
+        }
         if let Some(local) = self.locals.last_mut() {
             local.depth = self.scope_depth;
         }

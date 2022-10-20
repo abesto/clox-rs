@@ -9,6 +9,7 @@ use crate::chunk::InstructionDisassembler;
 use crate::{
     chunk::{CodeOffset, OpCode},
     compiler::Compiler,
+    scanner::Scanner,
     value::{Function, Value},
 };
 
@@ -69,7 +70,8 @@ impl VM {
     }
 
     pub fn interpret(&mut self, source: &[u8]) -> InterpretResult {
-        let result = if let Some(function) = Compiler::compile(source) {
+        let scanner = Scanner::new(source);
+        let result = if let Some(function) = Compiler::compile(scanner) {
             let function = Rc::new(RefCell::new(function));
             self.frames.push(CallFrame {
                 function: Rc::clone(&function),
