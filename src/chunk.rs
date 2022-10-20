@@ -1,3 +1,4 @@
+use derivative::Derivative;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use paste::paste;
 use shrinkwraprs::Shrinkwrap;
@@ -83,9 +84,12 @@ impl OpCode {
     }
 }
 
+#[derive(PartialEq, Derivative, Clone)]
+#[derivative(PartialOrd)]
 pub struct Chunk {
     name: String,
     code: Vec<u8>,
+    #[derivative(PartialOrd = "ignore")]
     lines: Vec<(usize, Line)>,
     constants: Vec<Value>,
 }

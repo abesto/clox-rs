@@ -1,13 +1,14 @@
+use crate::chunk::Chunk;
+
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
+#[allow(clippy::box_collection)]
 pub enum Value {
     Bool(bool),
     Nil,
     Number(f64),
-    #[allow(clippy::box_collection)]
-    // `String` needs 2-3x`usize` to store, while `Box` needs only `usize`.
-    // This means dropping the `Box` takes `Value` from 16 bytes to 32 bytes.
-    // TODO: benchmark the performance cost of the extra indirection.
+
     String(Box<String>),
+    Function(Box<Function>),
 }
 
 impl From<bool> for Value {
@@ -31,10 +32,11 @@ impl From<String> for Value {
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Bool(bool) => f.pad(&format!("{}", bool)),
-            Self::Number(num) => f.pad(&format!("{}", num)),
-            Self::Nil => f.pad("nil"),
-            Self::String(s) => f.pad(&format!("{}", *s)),
+            Value::Bool(bool) => f.pad(&format!("{}", bool)),
+            Value::Number(num) => f.pad(&format!("{}", num)),
+            Value::Nil => f.pad("nil"),
+            Value::String(s) => f.pad(&format!("{}", *s)),
+            Value::Function(fun) => f.pad(&format!("<fn {}>", fun.name)),
         }
     }
 }
@@ -48,6 +50,27 @@ impl Value {
         match self {
             Self::Number(num) => *num,
             _ => panic!("as_64() called on non-Number Value"),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
+pub struct Function {
+    arity: usize,
+    chunk: Chunk,
+    name: String,
+}
+
+impl Function {
+    #[must_use]
+    pub fn new<S>(arity: usize, name: S) -> Self
+    where
+        S: ToString,
+    {
+        Self {
+            arity,
+            name: name.to_string(),
+            chunk: Chunk::new(name),
         }
     }
 }
