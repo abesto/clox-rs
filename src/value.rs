@@ -1,5 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
+use derivative::Derivative;
+
 use crate::chunk::Chunk;
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
@@ -11,6 +13,7 @@ pub enum Value {
 
     String(Box<String>),
     Function(Rc<RefCell<Function>>),
+    NativeFunction(NativeFunction),
 }
 
 impl From<bool> for Value {
@@ -45,6 +48,7 @@ impl std::fmt::Display for Value {
             Value::Nil => f.pad("nil"),
             Value::String(s) => f.pad(&format!("{}", *s)),
             Value::Function(fun) => f.pad(&format!("<fn {}>", fun.borrow().name)),
+            Value::NativeFunction(fun) => f.pad(&format!("<native fn {}>", fun.name)),
         }
     }
 }
@@ -81,6 +85,26 @@ impl Function {
             chunk: Chunk::new(name),
         }
     }
+}
+
+#[derive(Derivative)]
+#[derivative(Debug, PartialEq, PartialOrd, Clone)]
+pub struct NativeFunction {
+    pub name: String,
+
+    #[derivative(
+            Debug = "ignore",
+            // Treat the implementation as always equal; we discriminate built-in functions by name
+            PartialEq(compare_with = "always_equals"),
+            PartialOrd = "ignore"
+        )]
+    pub fun: NativeFunctionImpl,
+}
+
+pub type NativeFunctionImpl = fn(&mut [Value]) -> Value;
+
+fn always_equals<T>(_: &T, _: &T) -> bool {
+    true
 }
 
 #[cfg(test)]

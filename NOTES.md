@@ -47,3 +47,39 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * `shrinkwraprs`: We use `u8` / `usize` for a ton of different meanings. Would be good to not mix them up. This helps with that. Currently only really used by `chunk.rs`.
   * If used incorrectly it'll likely have a pretty bad performance impact, but: first make it correct, then make it fast.
   * It also leads to a fair bit of `.as_ref()` noise, but... maybe it's still worth it? Let's see.
+
+# Performance
+
+## Methodology
+
+`fib.lox`:
+
+```
+fun fib(n) {
+    if (n < 2) return n;
+    return fib(n - 1) + fib(n - 2);
+}
+
+print fib(30);
+```
+
+Example run:
+
+```
+abesto@localhost:~/clox-rs$ hyperfine --warmup 1 '../jlox-rs/target/release/jlox_rs ./fib.lox' './target/release/clox-rs ./fib.lox'
+Benchmark 1: ../jlox-rs/target/release/jlox_rs ./fib.lox
+  Time (mean ± σ):      2.001 s ±  0.016 s    [User: 1.996 s, System: 0.001 s]
+  Range (min … max):    1.980 s …  2.022 s    10 runs
+ 
+Benchmark 2: ./target/release/clox-rs ./fib.lox
+  Time (mean ± σ):      1.119 s ±  0.011 s    [User: 1.115 s, System: 0.002 s]
+  Range (min … max):    1.104 s …  1.141 s    10 runs
+ 
+Summary
+  './target/release/clox-rs ./fib.lox' ran
+    1.79 ± 0.02 times faster than '../jlox-rs/target/release/jlox_rs ./fib.lox'
+```
+
+* End of Chapter 24
+  * vs [`jlox-rs`](https://github.com/abesto/jlox-rs): 1.79 ± 0.02 times faster 
+  * vs `clox` proper: 8.14 ± 0.11 times slower

@@ -1,4 +1,9 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    rc::Rc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 #[cfg(feature = "trace_execution")]
 use crate::chunk::InstructionDisassembler;
@@ -6,7 +11,7 @@ use crate::{
     chunk::{CodeOffset, OpCode},
     compiler::Compiler,
     scanner::Scanner,
-    value::{Function, Value},
+    value::{Function, NativeFunction, NativeFunctionImpl, Value},
 };
 
 const FRAMES_MAX: usize = 64;
@@ -61,11 +66,15 @@ pub struct VM {
 impl VM {
     #[must_use]
     pub fn new() -> Self {
-        Self {
+        let mut vm = Self {
             frames: Vec::with_capacity(FRAMES_MAX),
             stack: Vec::with_capacity(STACK_MAX),
             globals: HashMap::new(),
-        }
+        };
+
+        vm.define_native("clock", clock_native);
+
+        vm
     }
 
     pub fn interpret(&mut self, source: &[u8]) -> InterpretResult {
@@ -244,7 +253,8 @@ impl VM {
                 }
                 OpCode::Return => {
                     let result = self.stack.pop();
-                    self.frames
+                    let frame = self
+                        .frames
                         .pop()
                         .expect("Call stack underflow in OP_RETURN");
 
@@ -253,7 +263,7 @@ impl VM {
                         return InterpretResult::Ok;
                     }
 
-                    self.stack.truncate(self.frame().stack_base + 1);
+                    self.stack.truncate(frame.stack_base);
                     self.stack_push(result.expect("Stack underflow in OP_RETURN"));
                 }
                 OpCode::Constant => {
@@ -310,8 +320,15 @@ impl VM {
                             a.push_str(b);
                             self.stack.pop();
                         }
-                        _ => {
-                            runtime_error!(self, "Operands must be two numbers or two strings.");
+                        args => {
+                            runtime_error!(
+                                self,
+                                "Operands must be two numbers or two strings. Got: [{}]",
+                                args.iter()
+                                    .map(|v| format!("{}", v))
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            );
                             return InterpretResult::RuntimeError;
                         }
                     }
@@ -410,6 +427,14 @@ impl VM {
     fn call_value(&mut self, callee: Value, arg_count: u8) -> bool {
         match callee {
             Value::Function(f) => self.call(&f, arg_count),
+            Value::NativeFunction(NativeFunction { fun, .. }) => {
+                let start_index = self.stack.len() - usize::from(arg_count);
+                let result = fun(&mut self.stack[start_index..]);
+                self.stack
+                    .truncate(self.stack.len() - usize::from(arg_count) - 1);
+                self.stack_push(result);
+                true
+            }
             _ => {
                 runtime_error!(self, "Can only call functions and classes.");
                 false
@@ -436,4 +461,29 @@ impl VM {
         });
         true
     }
+
+    pub fn define_native<S>(&mut self, name: S, fun: NativeFunctionImpl)
+    where
+        S: ToString,
+    {
+        self.globals.insert(
+            name.to_string(),
+            Global {
+                value: Value::NativeFunction(NativeFunction {
+                    name: name.to_string(),
+                    fun,
+                }),
+                mutable: false,
+            },
+        );
+    }
+}
+
+fn clock_native(_args: &mut [Value]) -> Value {
+    Value::Number(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64(),
+    )
 }
