@@ -83,3 +83,7 @@ Summary
 * End of Chapter 24
   * vs [`jlox-rs`](https://github.com/abesto/jlox-rs): 1.79 ± 0.02 times faster 
   * vs `clox` proper: 8.14 ± 0.11 times slower
+* After a basic optimization pass
+  * vs [`jlox-rs`](https://github.com/abesto/jlox-rs): 4.39 ± 0.07 times faster
+  * vs `clox` proper: 3.32 ± 0.07 times slower
+    * Two biggest offenders seems like `Value::clone` (called a lot when reading globals) and `core::ptr::drop_in_place` (executed a lot inside `VM::add` on `*stack_item = (stack_item.as_f64() + *b).into();` for some reason)

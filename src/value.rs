@@ -1,18 +1,17 @@
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 use derivative::Derivative;
 
 use crate::chunk::Chunk;
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
-#[allow(clippy::box_collection)]
 pub enum Value {
     Bool(bool),
     Nil,
     Number(f64),
 
-    String(Box<String>),
-    Function(Rc<RefCell<Function>>),
+    String(String),
+    Function(Rc<Function>),
     NativeFunction(NativeFunction),
 }
 
@@ -30,13 +29,13 @@ impl From<f64> for Value {
 
 impl From<String> for Value {
     fn from(s: String) -> Self {
-        Value::String(Box::new(s))
+        Value::String(s)
     }
 }
 
 impl From<Function> for Value {
     fn from(f: Function) -> Self {
-        Value::Function(Rc::new(RefCell::new(f)))
+        Value::Function(Rc::new(f))
     }
 }
 
@@ -46,8 +45,8 @@ impl std::fmt::Display for Value {
             Value::Bool(bool) => f.pad(&format!("{}", bool)),
             Value::Number(num) => f.pad(&format!("{}", num)),
             Value::Nil => f.pad("nil"),
-            Value::String(s) => f.pad(&format!("{}", *s)),
-            Value::Function(fun) => f.pad(&format!("<fn {}>", fun.borrow().name)),
+            Value::String(s) => f.pad(s),
+            Value::Function(fun) => f.pad(&format!("<fn {}>", fun.name)),
             Value::NativeFunction(fun) => f.pad(&format!("<native fn {}>", fun.name)),
         }
     }
@@ -105,10 +104,4 @@ pub type NativeFunctionImpl = fn(&mut [Value]) -> Value;
 
 fn always_equals<T>(_: &T, _: &T) -> bool {
     true
-}
-
-#[cfg(test)]
-#[test]
-fn value_size() {
-    assert_eq!(16, std::mem::size_of::<Value>());
 }

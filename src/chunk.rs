@@ -89,7 +89,7 @@ impl OpCode {
 #[derivative(PartialOrd)]
 pub struct Chunk {
     name: String,
-    code: Vec<u8>,
+    pub code: Vec<u8>,
     #[derivative(PartialOrd = "ignore")]
     lines: Vec<(usize, Line)>,
     constants: Vec<Value>,

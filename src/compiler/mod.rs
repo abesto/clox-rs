@@ -4,8 +4,7 @@ mod front;
 mod rules;
 mod variables;
 
-use std::collections::HashMap;
-
+use hashbrown::HashMap;
 use shrinkwraprs::Shrinkwrap;
 
 use crate::{
