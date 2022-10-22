@@ -107,7 +107,7 @@ pub struct NativeFunction {
     pub fun: NativeFunctionImpl,
 }
 
-pub type NativeFunctionImpl = fn(&mut [Value]) -> Value;
+pub type NativeFunctionImpl = fn(&mut [Value]) -> Result<Value, String>;
 
 fn always_equals<T>(_: &T, _: &T) -> bool {
     true

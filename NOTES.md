@@ -38,6 +38,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * 23/1: `switch` statements.
 * 23/3: `continue` statements. Made a naive implementation, got confused about scopes and missed some edge cases; ported the solution from the book repo.
 * 24/1: arity check on native functions
+* 24/3: native functions can report runtime errors
 * TODO ternary operator
 * STRETCH: add error handling to user code
 * TODO add a `Value` variant that holds a reference to a string value kept alive somewhere else (Chapter 19)

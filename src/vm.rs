@@ -69,6 +69,7 @@ impl VM {
         };
 
         vm.define_native("clock", 0, clock_native);
+        vm.define_native("sqrt", 1, sqrt_native);
 
         vm
     }
@@ -496,11 +497,18 @@ impl VM {
                     false
                 } else {
                     let start_index = self.stack.len() - usize::from(arg_count);
-                    let result = fun(&mut self.stack[start_index..]);
-                    self.stack
-                        .truncate(self.stack.len() - usize::from(arg_count) - 1);
-                    self.stack_push(result);
-                    true
+                    match fun(&mut self.stack[start_index..]) {
+                        Ok(value) => {
+                            self.stack
+                                .truncate(self.stack.len() - usize::from(arg_count) - 1);
+                            self.stack_push(value);
+                            true
+                        }
+                        Err(e) => {
+                            runtime_error!(self, "{}", e);
+                            false
+                        }
+                    }
                 }
             }
             _ => {
@@ -549,11 +557,19 @@ impl VM {
     }
 }
 
-fn clock_native(_args: &mut [Value]) -> Value {
-    Value::Number(
+fn clock_native(_args: &mut [Value]) -> Result<Value, String> {
+    Ok(Value::Number(
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs_f64(),
-    )
+    ))
+}
+
+fn sqrt_native(args: &mut [Value]) -> Result<Value, String> {
+    match args {
+        [Value::Number(n)] => Ok(n.sqrt().into()),
+        [x] => Err(format!("'sqrt' expected numeric argument, got: {}", x)),
+        _ => unreachable!(),
+    }
 }
