@@ -20,6 +20,7 @@ pub struct ConstantLongIndex(pub usize);
 pub enum OpCode {
     Constant,
     ConstantLong,
+    Closure,
 
     DefineGlobal,
     DefineGlobalLong,
@@ -72,7 +73,7 @@ impl OpCode {
                 Negate | Add | Subtract | Multiply | Divide | Nil | True | False | Not | Equal
                 | Greater | Less | Print | Pop | Dup => 0,
                 Constant | GetLocal | SetLocal | GetGlobal | SetGlobal | DefineGlobal
-                | DefineGlobalConst | Return | Call => 1,
+                | DefineGlobalConst | Return | Call | Closure => 1,
                 JumpIfFalse | Jump | Loop => 2,
                 ConstantLong
                 | GetGlobalLong
@@ -286,6 +287,17 @@ impl<'a> InstructionDisassembler<'a> {
         };
         writeln!(f, "{:-16} {:>4} -> {}", name, **offset, target)
     }
+
+    fn debug_closure_opcode(
+        &self,
+        f: &mut std::fmt::Formatter,
+        name: &str,
+        offset: &CodeOffset,
+    ) -> std::fmt::Result {
+        let code = self.chunk.code();
+        let constant = code[offset.as_ref() + 1];
+        writeln!(f, "{:-16} {:>4}", name, constant)
+    }
 }
 
 macro_rules! disassemble {
@@ -335,7 +347,7 @@ impl<'a> std::fmt::Debug for InstructionDisassembler<'a> {
                 DefineGlobal,
                 DefineGlobalConst,
                 GetGlobal,
-                SetGlobal
+                SetGlobal,
             ),
             constant_long(
                 ConstantLong,
@@ -344,6 +356,7 @@ impl<'a> std::fmt::Debug for InstructionDisassembler<'a> {
                 GetGlobalLong,
                 SetGlobalLong
             ),
+            closure(Closure),
             byte(GetLocal, SetLocal, Call),
             byte_long(GetLocalLong, SetLocalLong),
             jump(Jump, JumpIfFalse, Loop),

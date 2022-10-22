@@ -173,6 +173,10 @@ impl VM {
                     let value = self.read_constant(true).clone();
                     self.stack_push(value);
                 }
+                OpCode::Closure => {
+                    let value = self.read_constant(true).clone();
+                    self.stack_push(value);
+                }
                 OpCode::Nil => self.stack_push(Value::Nil),
                 OpCode::True => self.stack_push(Value::Bool(true)),
                 OpCode::False => self.stack_push(Value::Bool(false)),

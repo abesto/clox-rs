@@ -19,11 +19,11 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * Completely skipped chapter 20 (Hash Tables) because we have them in Rust (also mostly skipped the part where we rebuild `Box`).
 * `StackFrame::function` is a pointer to an `ObjFunction` in C. In Rust, we can't "just" stuff in a pointer. At a first approximation, I'll use `Rc<RefCell>` for storing `Function` instances. I considered `Weak` for storage in `CallFrame`s, but it doesn't really give any performance improvements I think (they need to be `updrade`ed when used *anyway*).
 * The book handles the stack of compilers with an explicit linked list, and lets globals implicitly take care of shared state. Instead, we use the Rust call stack to handle the compiler stack, and explicitly fork / join shared state.
+* Most `Obj*` things in the book map to a `Value` variant. `Closure` is an exception: `ObjFunction` maps to `Function`, and `ObjClosure` maps to `Value::Function`.
 
 # TODO
 
 * Drop the VM stack after we're done interpreting a piece of code. In the REPL, stuff can stay there after runtime errors.
-* Add "standards mode" to pass the original test suite (stuff like: we have `OP_CONSTANT_LONG`, but canonical Lox doesn't)
 * Clean up unused strings in `Arena` (GC?!)
 
 # Challenges
