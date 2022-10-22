@@ -1,0 +1,11 @@
+fun a(x, y) {
+    var x1 = b(x);
+    var y1 = b(y);
+    return x1 + y1;
+}
+
+fun b(x) {
+    return x * 3;
+}
+
+print a(10, 20); // expect: 90

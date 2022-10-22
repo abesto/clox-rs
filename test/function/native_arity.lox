@@ -1,0 +1,1 @@
+clock(12); // expect runtime error: Native function 'clock' expected 0 arguments, got 1.
