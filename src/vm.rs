@@ -14,9 +14,6 @@ use crate::{
     value::{Function, NativeFunction, NativeFunctionImpl, Value},
 };
 
-const FRAMES_MAX: usize = 64;
-const STACK_MAX: usize = FRAMES_MAX * 256;
-
 #[derive(Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum InterpretResult {
@@ -66,8 +63,8 @@ impl VM {
     #[must_use]
     pub fn new() -> Self {
         let mut vm = Self {
-            frames: Vec::with_capacity(FRAMES_MAX),
-            stack: Vec::with_capacity(STACK_MAX),
+            frames: Vec::with_capacity(crate::config::FRAMES_MAX),
+            stack: Vec::with_capacity(crate::config::STACK_MAX),
             globals: HashMap::new(),
         };
 
@@ -220,14 +217,18 @@ impl VM {
                 self.stack.pop();
             }
             args => {
-                runtime_error!(
-                    self,
-                    "Operands must be two numbers or two strings. Got: [{}]",
-                    args.iter()
-                        .map(|v| format!("{}", v))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                );
+                if crate::config::is_std_mode() {
+                    runtime_error!(self, "Operands must be two numbers or two strings.");
+                } else {
+                    runtime_error!(
+                        self,
+                        "Operands must be two numbers or two strings. Got: [{}]",
+                        args.iter()
+                            .map(|v| format!("{}", v))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                }
                 return Some(InterpretResult::RuntimeError);
             }
         }
@@ -492,7 +493,7 @@ impl VM {
                 true
             }
             _ => {
-                runtime_error!(self, "Can only execute_call functions and classes.");
+                runtime_error!(self, "Can only call functions and classes.");
                 false
             }
         }
@@ -506,7 +507,7 @@ impl VM {
             return false;
         }
 
-        if self.frames.len() == FRAMES_MAX {
+        if self.frames.len() == crate::config::FRAMES_MAX {
             runtime_error!(self, "Stack overflow.");
             return false;
         }

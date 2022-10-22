@@ -24,6 +24,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 
 * Drop the VM stack after we're done interpreting a piece of code. In the REPL, stuff can stay there after runtime errors.
 * Add "standards mode" to pass the original test suite (stuff like: we have `OP_CONSTANT_LONG`, but canonical Lox doesn't)
+* Clean up unused strings in `Arena` (GC?!)
 
 # Challenges
 

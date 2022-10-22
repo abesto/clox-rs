@@ -1,5 +1,6 @@
-use std::io::Write;
+use std::{io::Write, path::PathBuf};
 
+use clap::Parser;
 use vm::InterpretResult;
 
 use crate::vm::VM;
@@ -7,20 +8,32 @@ use crate::vm::VM;
 mod bitwise;
 mod chunk;
 mod compiler;
+mod config;
 mod scanner;
 mod types;
 mod value;
 mod vm;
 
+#[derive(Parser, Debug)]
+#[command(version)]
+struct Args {
+    /// Standards mode: compatibility with standard `clox`. Passes the standard `clox` test suite.
+    #[arg(long)]
+    std: bool,
+
+    file: Option<PathBuf>,
+}
+
 fn main() {
-    match std::env::args().collect::<Vec<_>>().as_slice() {
-        [_] => repl(),
-        [_, file] => run_file(file),
-        _ => {
-            eprintln!("Usage: clox-rs [path]");
-            std::process::exit(64);
-        }
-    };
+    let args = Args::parse();
+
+    config::set_std_mode(args.std);
+
+    if let Some(path) = args.file {
+        run_file(path);
+    } else {
+        repl();
+    }
 }
 
 fn repl() {
@@ -38,7 +51,7 @@ fn repl() {
     }
 }
 
-fn run_file(file: &str) {
+fn run_file(file: PathBuf) {
     match std::fs::read(file) {
         Err(e) => {
             eprintln!("{}", e);

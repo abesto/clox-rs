@@ -114,7 +114,8 @@ impl<'a> Compiler<'a> {
     }
 
     fn add_local(&mut self, name: Token<'a>, mutable: bool) {
-        if self.locals.len() > usize::pow(2, 23) {
+        let limit_exp = if crate::config::is_std_mode() { 8 } else { 24 };
+        if self.locals.len() > usize::pow(2, limit_exp) - 1 {
             self.error("Too many local variables in function.");
             return;
         }
@@ -198,8 +199,10 @@ impl<'a> Compiler<'a> {
                 self.expression();
                 if arg_count == 255 {
                     self.error("Can't have more than 255 arguments.");
+                    break;
+                } else {
+                    arg_count += 1;
                 }
-                arg_count += 1;
                 if !self.match_(TK::Comma) {
                     break;
                 }

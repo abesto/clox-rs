@@ -245,12 +245,12 @@ impl<'a> Scanner<'a> {
         self.make_token(TokenKind::Number)
     }
 
+    fn is_identifier_char(c: &u8) -> bool {
+        c.is_ascii_alphanumeric() || c == &b'_'
+    }
+
     fn identifier(&mut self) -> Token<'a> {
-        while self
-            .peek()
-            .map(|c| c.is_ascii_alphanumeric() || c == &b'_')
-            .unwrap_or(false)
-        {
+        while self.peek().map(Self::is_identifier_char).unwrap_or(false) {
             self.advance();
         }
         let token_kind = self.identifier_type();
@@ -305,7 +305,13 @@ impl<'a> Scanner<'a> {
     fn check_keyword(&self, start: usize, rest: &str, kind: TokenKind) -> TokenKind {
         let from = self.source.len().min(self.start + start);
         let to = self.source.len().min(from + rest.len());
-        if &self.source[from..to] == rest.as_bytes() {
+        if &self.source[from..to] == rest.as_bytes()
+            && self
+                .source
+                .get(to)
+                .map(|c| !Self::is_identifier_char(c))
+                .unwrap_or(true)
+        {
             kind
         } else {
             TokenKind::Identifier

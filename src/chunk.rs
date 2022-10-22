@@ -150,9 +150,11 @@ impl Chunk {
             self.write(OpCode::Constant, line);
             self.write(short_index, line);
             true
-        } else {
+        } else if !crate::config::is_std_mode() {
             self.write(OpCode::ConstantLong, line);
             self.write_24bit_number(*long_index, line)
+        } else {
+            false
         }
     }
 

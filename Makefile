@@ -15,7 +15,7 @@ cargo-test:
 craftinginterpreters-test: $(DEBUG_BIN)
 	$(eval home := $(shell pwd))
 	cd $(CRAFTING_INTERPRETERS) && \
-		dart tool/bin/test.dart $(test_level) --interpreter $(home)/$(DEBUG_BIN)
+		dart tool/bin/test.dart $(test_level) --interpreter $(home)/$(DEBUG_BIN) --arguments --std
 
 
 .PHONY: custom-dart-test

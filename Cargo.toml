@@ -4,6 +4,7 @@ name = "clox-rs"
 version = "0.1.0"
 
 [dependencies]
+clap = { version = "4.0.18", features = ["derive"] }
 derivative = "2.2.0"
 hashbrown = "0.12.3"
 num_enum = "0.5.7"

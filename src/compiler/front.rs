@@ -90,7 +90,7 @@ impl<'a> Compiler<'a> {
                 loop {
                     compiler.current_function.arity += 1;
                     if compiler.current_function.arity > 255 {
-                        self.error_at_current("Can't have more than 255 parameters.");
+                        compiler.error_at_current("Can't have more than 255 parameters.");
                     }
                     let constant = compiler.parse_variable("Expect parameter name.", false);
                     compiler.define_variable(constant, false);

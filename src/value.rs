@@ -47,7 +47,13 @@ impl std::fmt::Display for Value {
             Value::Nil => f.pad("nil"),
             Value::String(s) => f.pad(s),
             Value::Function(fun) => f.pad(&format!("<fn {}>", fun.name)),
-            Value::NativeFunction(fun) => f.pad(&format!("<native fn {}>", fun.name)),
+            Value::NativeFunction(fun) => {
+                if crate::config::is_std_mode() {
+                    f.pad("<native fn>")
+                } else {
+                    f.pad(&format!("<native fn {}>", fun.name))
+                }
+            }
         }
     }
 }
