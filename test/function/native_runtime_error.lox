@@ -1,0 +1,1 @@
+print sqrt(nil); // expect runtime error: 'sqrt' expected numeric argument, got: nil

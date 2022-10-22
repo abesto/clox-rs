@@ -1,9 +1,14 @@
-use crate::chunk::{ConstantLongIndex, OpCode};
+use hashbrown::hash_map::Entry;
+
+use crate::{
+    arena::StringId,
+    chunk::{ConstantLongIndex, OpCode},
+};
 
 use super::{Compiler, Local, ScopeDepth};
 use crate::scanner::{Token, TokenKind as TK};
 
-impl<'a> Compiler<'a> {
+impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     pub(super) fn begin_scope(&mut self) {
         *self.scope_depth += 1;
     }
@@ -64,16 +69,27 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    pub(super) fn string_id<S>(&mut self, s: S) -> StringId
+    where
+        S: ToString,
+    {
+        match self.strings_by_name.entry(s.to_string()) {
+            Entry::Vacant(entry) => *entry.insert(self.arena.add_string(s.to_string())),
+            Entry::Occupied(entry) => *entry.get(),
+        }
+    }
+
     fn identifier_constant<S>(&mut self, name: S) -> ConstantLongIndex
     where
         S: ToString,
     {
-        let name = name.to_string();
-        if let Some(index) = self.globals_by_name.get(&name) {
+        let string_id = self.string_id(name);
+
+        if let Some(index) = self.globals_by_name.get(&string_id) {
             *index
         } else {
-            let index = self.current_chunk().make_constant(name.to_string().into());
-            self.globals_by_name.insert(name, index);
+            let index = self.current_chunk().make_constant(string_id.into());
+            self.globals_by_name.insert(string_id, index);
             index
         }
     }
@@ -103,7 +119,7 @@ impl<'a> Compiler<'a> {
         retval
     }
 
-    fn add_local(&mut self, name: Token<'a>, mutable: bool) {
+    fn add_local(&mut self, name: Token<'scanner>, mutable: bool) {
         let limit_exp = if crate::config::is_std_mode() { 8 } else { 24 };
         if self.locals.len() > usize::pow(2, limit_exp) - 1 {
             self.error("Too many local variables in function.");

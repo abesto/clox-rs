@@ -16,5 +16,6 @@ print_code = []
 trace_execution = []
 
 # Uncomment for valgrind profiling
-#[profile.release]
-#opt-level = 1
+[profile.release]
+debug = true
+opt-level = 1

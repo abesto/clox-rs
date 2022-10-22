@@ -1,10 +1,12 @@
 use std::{io::Write, path::PathBuf};
 
 use clap::Parser;
+
 use vm::InterpretResult;
 
 use crate::vm::VM;
 
+mod arena;
 mod bitwise;
 mod chunk;
 mod compiler;

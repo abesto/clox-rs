@@ -6,7 +6,7 @@ use crate::{
     value::Value,
 };
 
-impl<'a> Compiler<'a> {
+impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
     pub(super) fn advance(&mut self) {
         self.previous = std::mem::take(&mut self.current);
         loop {
@@ -77,11 +77,13 @@ impl<'a> Compiler<'a> {
         let function = {
             let mut compiler = Compiler::new(
                 self.scanner.clone(),
+                self.arena,
                 self.previous.as_ref().unwrap().as_str(),
                 function_type,
             );
             compiler.current = self.current.clone();
             compiler.previous = self.previous.clone();
+            compiler.strings_by_name = std::mem::take(&mut self.strings_by_name);
 
             compiler.begin_scope();
             compiler.consume(TK::LeftParen, "Expect '(' after function name.");
@@ -111,6 +113,7 @@ impl<'a> Compiler<'a> {
             self.previous = compiler.previous;
             self.had_error |= compiler.had_error;
             self.panic_mode |= compiler.panic_mode;
+            self.strings_by_name = std::mem::take(&mut compiler.strings_by_name);
             compiler.current_function
         };
 

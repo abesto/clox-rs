@@ -8,6 +8,7 @@ use hashbrown::HashMap;
 #[cfg(feature = "trace_execution")]
 use crate::chunk::InstructionDisassembler;
 use crate::{
+    arena::{Arena, StringId},
     chunk::{CodeOffset, OpCode},
     compiler::Compiler,
     scanner::Scanner,
@@ -27,7 +28,7 @@ macro_rules! runtime_error {
         eprintln!($($arg),*);
         for frame in $self.frames.iter().rev() {
             let line = frame.function.chunk.get_line(&CodeOffset(frame.ip - 1));
-            eprintln!("[line {}] in {}", *line, frame.function.name);
+            eprintln!("[line {}] in {}", *line, *frame.function.name);
         }
     };
 }
@@ -54,15 +55,17 @@ pub struct CallFrame {
 }
 
 pub struct VM {
+    arena: Arena,
     frames: Vec<CallFrame>,
     stack: Vec<Value>,
-    globals: HashMap<String, Global>,
+    globals: HashMap<StringId, Global>,
 }
 
 impl VM {
     #[must_use]
     pub fn new() -> Self {
         let mut vm = Self {
+            arena: Arena::new(),
             frames: Vec::with_capacity(crate::config::FRAMES_MAX),
             stack: Vec::with_capacity(crate::config::STACK_MAX),
             globals: HashMap::new(),
@@ -76,7 +79,7 @@ impl VM {
 
     pub fn interpret(&mut self, source: &[u8]) -> InterpretResult {
         let scanner = Scanner::new(source);
-        let result = if let Some(function) = Compiler::compile(scanner) {
+        let result = if let Some(function) = Compiler::compile(scanner, &mut self.arena) {
             let function = Rc::new(function);
             self.stack_push(Value::Function(Rc::clone(&function)));
             self.execute_call(function, 0);
@@ -95,10 +98,9 @@ impl VM {
         loop {
             #[cfg(feature = "trace_execution")]
             {
-                let function_ref = self.function();
-                let function = function_ref.borrow();
+                let function = &self.frame().function;
                 let mut disassembler = InstructionDisassembler::new(&function.chunk);
-                *disassembler.offset = self.frame().ip - 1;
+                *disassembler.offset = self.frame().ip;
                 println!(
                     "          [{}]",
                     self.stack
@@ -218,8 +220,10 @@ impl VM {
                 self.stack.pop();
             }
             [Value::String(a), Value::String(b)] => {
-                a.push_str(b);
+                let new_string_id = self.arena.add_string(format!("{}{}", **a, **b));
                 self.stack.pop();
+                self.stack.pop();
+                self.stack_push(new_string_id.into());
             }
             args => {
                 if crate::config::is_std_mode() {
@@ -288,7 +292,7 @@ impl VM {
     fn define_global(&mut self, op: OpCode) {
         match self.read_constant(op == OpCode::DefineGlobalLong) {
             Value::String(name) => {
-                let name = name.clone();
+                let name = *name;
                 self.globals.insert(
                     name,
                     Global {
@@ -340,8 +344,7 @@ impl VM {
         let constant_index = self.read_constant_index(op == OpCode::SetGlobalLong);
         match self.read_constant_value(constant_index).clone() {
             Value::String(name) => {
-                let name = name.as_str();
-                if let Some(global) = self.globals.get_mut(name) {
+                if let Some(global) = self.globals.get_mut(&name) {
                     if !global.mutable {
                         runtime_error!(self, "Reassignment to global 'const'.");
                         return Some(InterpretResult::RuntimeError);
@@ -352,7 +355,7 @@ impl VM {
                         .unwrap_or_else(|| panic!("stack underflow in {:?}", op))
                         .clone();
                 } else {
-                    runtime_error!(self, "Undefined variable '{}'.", name);
+                    runtime_error!(self, "Undefined variable '{}'.", *name);
                     return Some(InterpretResult::RuntimeError);
                 }
             }
@@ -367,10 +370,10 @@ impl VM {
     fn get_global(&mut self, op: OpCode) -> Option<InterpretResult> {
         let constant_index = self.read_constant_index(op == OpCode::GetGlobalLong);
         match self.read_constant_value(constant_index) {
-            Value::String(name) => match self.globals.get(&**name) {
+            Value::String(name) => match self.globals.get(name) {
                 Some(global) => self.stack_push(global.value.clone()),
                 None => {
-                    runtime_error!(self, "Undefined variable '{}'.", name);
+                    runtime_error!(self, "Undefined variable '{}'.", **name);
                     return Some(InterpretResult::RuntimeError);
                 }
             },
@@ -547,8 +550,9 @@ impl VM {
     where
         S: ToString,
     {
+        let string_id = self.arena.add_string(name.to_string());
         self.globals.insert(
-            name.to_string(),
+            string_id,
             Global {
                 value: Value::NativeFunction(NativeFunction {
                     name: name.to_string(),

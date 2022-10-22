@@ -21,16 +21,16 @@ pub(super) enum Precedence {
     Primary,
 }
 
-type ParseFn<'a> = fn(&mut Compiler<'a>, bool) -> ();
+type ParseFn<'scanner, 'arena> = fn(&mut Compiler<'scanner, 'arena>, bool) -> ();
 
 #[derive(Clone)]
-pub(super) struct Rule<'a> {
-    prefix: Option<ParseFn<'a>>,
-    infix: Option<ParseFn<'a>>,
+pub(super) struct Rule<'scanner, 'arena> {
+    prefix: Option<ParseFn<'scanner, 'arena>>,
+    infix: Option<ParseFn<'scanner, 'arena>>,
     precedence: Precedence,
 }
 
-impl<'a> Default for Rule<'a> {
+impl<'scanner, 'arena> Default for Rule<'scanner, 'arena> {
     fn default() -> Self {
         Self {
             prefix: Default::default(),
@@ -59,11 +59,11 @@ macro_rules! make_rules {
     }};
 }
 
-pub(super) type Rules<'a> = [Rule<'a>; 46];
+pub(super) type Rules<'scanner, 'arena> = [Rule<'scanner, 'arena>; 46];
 
 // Can't be a static value because the associated function types include lifetimes
 #[rustfmt::skip]
-pub(super) fn make_rules<'a>() -> Rules<'a> {
+pub(super) fn make_rules<'scanner, 'arena>() -> Rules<'scanner, 'arena> {
     make_rules!(
         LeftParen    = [grouping, call,   Call],
         RightParen   = [None,     None,   None],
@@ -114,8 +114,8 @@ pub(super) fn make_rules<'a>() -> Rules<'a> {
     )
 }
 
-impl<'a> Compiler<'a> {
-    fn get_rule(&self, operator: TK) -> &Rule<'a> {
+impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
+    fn get_rule(&self, operator: TK) -> &Rule<'scanner, 'arena> {
         &self.rules[operator as usize]
     }
 
@@ -212,7 +212,8 @@ impl<'a> Compiler<'a> {
     fn string(&mut self, _can_assign: bool) {
         let lexeme = self.previous.as_ref().unwrap().as_str();
         let value = lexeme[1..lexeme.len() - 1].to_string();
-        self.emit_constant(value);
+        let string_id = self.string_id(&value);
+        self.emit_constant(string_id);
     }
 
     fn variable(&mut self, can_assign: bool) {

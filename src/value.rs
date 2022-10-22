@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use derivative::Derivative;
 
-use crate::chunk::Chunk;
+use crate::{arena::StringId, chunk::Chunk};
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum Value {
@@ -10,7 +10,7 @@ pub enum Value {
     Nil,
     Number(f64),
 
-    String(String),
+    String(StringId),
     Function(Rc<Function>),
     NativeFunction(NativeFunction),
 }
@@ -27,8 +27,8 @@ impl From<f64> for Value {
     }
 }
 
-impl From<String> for Value {
-    fn from(s: String) -> Self {
+impl From<StringId> for Value {
+    fn from(s: StringId) -> Self {
         Value::String(s)
     }
 }
@@ -46,7 +46,7 @@ impl std::fmt::Display for Value {
             Value::Number(num) => f.pad(&format!("{}", num)),
             Value::Nil => f.pad("nil"),
             Value::String(s) => f.pad(s),
-            Value::Function(fun) => f.pad(&format!("<fn {}>", fun.name)),
+            Value::Function(fun) => f.pad(&format!("<fn {}>", *fun.name)),
             Value::NativeFunction(fun) => {
                 if crate::config::is_std_mode() {
                     f.pad("<native fn>")
@@ -75,18 +75,15 @@ impl Value {
 pub struct Function {
     pub arity: usize,
     pub chunk: Chunk,
-    pub name: String,
+    pub name: StringId,
 }
 
 impl Function {
     #[must_use]
-    pub fn new<S>(arity: usize, name: S) -> Self
-    where
-        S: ToString,
-    {
+    pub fn new(arity: usize, name: StringId) -> Self {
         Self {
             arity,
-            name: name.to_string(),
+            name,
             chunk: Chunk::new(name),
         }
     }

@@ -3,7 +3,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use paste::paste;
 use shrinkwraprs::Shrinkwrap;
 
-use crate::{types::Line, value::Value};
+use crate::{arena::StringId, types::Line, value::Value};
 
 #[derive(Shrinkwrap, Clone, Copy)]
 #[shrinkwrap(mutable)]
@@ -101,7 +101,7 @@ impl OpCode {
 #[derive(PartialEq, Derivative, Clone)]
 #[derivative(PartialOrd)]
 pub struct Chunk {
-    name: String,
+    name: StringId,
     pub code: Vec<u8>,
     #[derivative(PartialOrd = "ignore")]
     lines: Vec<(usize, Line)>,
@@ -109,12 +109,9 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    pub fn new<S>(name: S) -> Self
-    where
-        S: ToString,
-    {
+    pub fn new(name: StringId) -> Self {
         Chunk {
-            name: name.to_string(),
+            name,
             code: Default::default(),
             lines: Default::default(),
             constants: Default::default(),
@@ -185,7 +182,7 @@ impl Chunk {
 
 impl std::fmt::Debug for Chunk {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "== {} ==", self.name)?;
+        writeln!(f, "== {} ==", *self.name)?;
         let mut disassembler = InstructionDisassembler::new(self);
         while disassembler.offset.as_ref() < &self.code.len() {
             write!(f, "{:?}", disassembler)?;
@@ -199,14 +196,14 @@ impl std::fmt::Debug for Chunk {
 }
 
 // Debug helpers
-pub struct InstructionDisassembler<'a> {
-    chunk: &'a Chunk,
+pub struct InstructionDisassembler<'chunk> {
+    chunk: &'chunk Chunk,
     pub offset: CodeOffset,
 }
 
-impl<'a> InstructionDisassembler<'a> {
+impl<'chunk> InstructionDisassembler<'chunk> {
     #[must_use]
-    pub fn new(chunk: &'a Chunk) -> Self {
+    pub fn new(chunk: &'chunk Chunk) -> Self {
         Self {
             chunk,
             offset: CodeOffset(0),
@@ -332,7 +329,7 @@ macro_rules! disassemble {
     }}
 }
 
-impl<'a> std::fmt::Debug for InstructionDisassembler<'a> {
+impl<'chunk> std::fmt::Debug for InstructionDisassembler<'chunk> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let code = self.chunk.code();
         let offset = &self.offset;

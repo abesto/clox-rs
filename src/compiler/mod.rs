@@ -8,6 +8,7 @@ use hashbrown::HashMap;
 use shrinkwraprs::Shrinkwrap;
 
 use crate::{
+    arena::{Arena, StringId},
     chunk::{Chunk, CodeOffset, ConstantLongIndex},
     compiler::rules::{make_rules, Rules},
     scanner::{Scanner, Token, TokenKind},
@@ -19,8 +20,8 @@ use crate::{
 #[shrinkwrap(mutable)]
 struct ScopeDepth(i32);
 
-struct Local<'a> {
-    name: Token<'a>,
+struct Local<'scanner> {
+    name: Token<'scanner>,
     depth: ScopeDepth,
     mutable: bool,
 }
@@ -37,10 +38,11 @@ struct LoopState {
     start: CodeOffset,
 }
 
-pub struct Compiler<'a> {
-    scanner: Scanner<'a>,
-    previous: Option<Token<'a>>,
-    current: Option<Token<'a>>,
+pub struct Compiler<'scanner, 'arena> {
+    arena: &'arena mut Arena,
+    scanner: Scanner<'scanner>,
+    previous: Option<Token<'scanner>>,
+    current: Option<Token<'scanner>>,
 
     had_error: bool,
     panic_mode: bool,
@@ -48,23 +50,32 @@ pub struct Compiler<'a> {
     current_function: Function,
     function_type: FunctionType,
 
-    globals_by_name: HashMap<String, ConstantLongIndex>,
-    rules: Rules<'a>,
-    locals: Vec<Local<'a>>,
+    strings_by_name: HashMap<String, StringId>,
+    globals_by_name: HashMap<StringId, ConstantLongIndex>,
+    rules: Rules<'scanner, 'arena>,
+    locals: Vec<Local<'scanner>>,
     scope_depth: ScopeDepth,
     loop_state: Option<LoopState>,
 }
 
-impl<'a> Compiler<'a> {
+impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     #[must_use]
-    fn new<S>(scanner: Scanner<'a>, function_name: S, function_type: FunctionType) -> Self
+    fn new<S>(
+        scanner: Scanner<'scanner>,
+        arena: &'arena mut Arena,
+        function_name: S,
+        function_type: FunctionType,
+    ) -> Self
     where
         S: ToString,
     {
-        let mut compiler = Self {
+        let function_name = arena.add_string(function_name.to_string());
+        let mut compiler = Compiler {
+            arena,
             current_function: Function::new(0, function_name),
             function_type,
             globals_by_name: HashMap::new(),
+            strings_by_name: HashMap::new(),
             scanner,
             previous: None,
             current: None,
@@ -104,8 +115,8 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    pub fn compile(scanner: Scanner<'a>) -> Option<Function> {
-        let compiler = Self::new(scanner, "<script>", FunctionType::Script);
+    pub fn compile(scanner: Scanner<'scanner>, arena: &'arena mut Arena) -> Option<Function> {
+        let compiler = Compiler::new(scanner, arena, "<script>", FunctionType::Script);
         compiler.compile_()
     }
 
