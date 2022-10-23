@@ -3,6 +3,7 @@ use hashbrown::hash_map::Entry;
 use crate::{
     arena::StringId,
     chunk::{ConstantLongIndex, OpCode},
+    config,
 };
 
 use super::{Compiler, Local, ScopeDepth};
@@ -43,7 +44,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         let arg = arg.unwrap();
 
         // Support for more than u8::MAX variables in a scope
-        let long = if !crate::config::is_std_mode() && arg > u8::MAX.into() {
+        let long = if !crate::config::STD_MODE.load() && arg > u8::MAX.into() {
             get_op = get_op.to_long();
             set_op = set_op.to_long();
             true
@@ -120,7 +121,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     }
 
     fn add_local(&mut self, name: Token<'scanner>, mutable: bool) {
-        let limit_exp = if crate::config::is_std_mode() { 8 } else { 24 };
+        let limit_exp = if config::STD_MODE.load() { 8 } else { 24 };
         if self.locals.len() > usize::pow(2, limit_exp) - 1 {
             self.error("Too many local variables in function.");
             return;

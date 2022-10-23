@@ -9,7 +9,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
   * `(int)(vm.ip - vm.chunk->code)` has no translation into Rust. I tried making `VM::ip` an iterator over `(code_offset, instruction)`, but that leads to lifetime nightmares. For now we go with a simple index here.
   * `Token`s store the "pointer" to the lexeme as a slice.
   * `CallFrame::slots` is a `Value*` in C; a direct translation would be a slice into `VM::stack`, but I can't easily sort out the lifetimes there. So: simple index again! I keep wondering about the performance.
-* `#define`-controlled features translate to Cargo features
+* `#define`-controlled features initially translated to Cargo features; after the third one I switched them to command-line arguments to simplify my life and save time on recompiling. The values are stored in global atomic bools in `config.rs`.
 * `VM::binary_op` is a higher-order function instead of a macro; hopefully this will be good enough later on.
 * Unlike [`jlox-rs`](https://github.com/abesto/jlox-rs/), error reporting on initial implementation follows closely the error reporting logic of the book so that I have less to mentally juggle. Might end up refactoring afterwards to use `Result`s.
 * `Scanner`: the `start` / `current` pointer pair is implemented with indices and slices. Using iterators *may* be more performant, and there may be a way to do that, but timed out on it for now.

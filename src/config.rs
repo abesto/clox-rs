@@ -3,12 +3,27 @@ use std::sync::atomic::{AtomicBool, Ordering};
 pub const FRAMES_MAX: usize = 64;
 pub const STACK_MAX: usize = FRAMES_MAX * 256;
 
-static STD_MODE: AtomicBool = AtomicBool::new(false);
-
-pub fn is_std_mode() -> bool {
-    STD_MODE.load(Ordering::Relaxed)
+pub struct GlobalFlag {
+    value: AtomicBool,
 }
 
-pub fn set_std_mode(val: bool) {
-    STD_MODE.store(val, Ordering::Relaxed);
+impl GlobalFlag {
+    #[must_use]
+    pub const fn new() -> GlobalFlag {
+        GlobalFlag {
+            value: AtomicBool::new(false),
+        }
+    }
+
+    pub fn store(&self, value: bool) {
+        self.value.store(value, Ordering::Relaxed);
+    }
+
+    pub fn load(&self) -> bool {
+        self.value.load(Ordering::Relaxed)
+    }
 }
+
+pub static STD_MODE: GlobalFlag = GlobalFlag::new();
+pub static TRACE_EXECUTION: GlobalFlag = GlobalFlag::new();
+pub static PRINT_CODE: GlobalFlag = GlobalFlag::new();

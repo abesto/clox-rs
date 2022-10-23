@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use derivative::Derivative;
 
-use crate::{arena::StringId, chunk::Chunk};
+use crate::{arena::StringId, chunk::Chunk, config};
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum Value {
@@ -48,7 +48,7 @@ impl std::fmt::Display for Value {
             Value::String(s) => f.pad(s),
             Value::Function(fun) => f.pad(&format!("<fn {}>", *fun.name)),
             Value::NativeFunction(fun) => {
-                if crate::config::is_std_mode() {
+                if config::STD_MODE.load() {
                     f.pad("<native fn>")
                 } else {
                     f.pad(&format!("<native fn {}>", fun.name))

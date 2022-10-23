@@ -3,7 +3,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use paste::paste;
 use shrinkwraprs::Shrinkwrap;
 
-use crate::{arena::StringId, types::Line, value::Value};
+use crate::{arena::StringId, config, types::Line, value::Value};
 
 #[derive(Shrinkwrap, Clone, Copy)]
 #[shrinkwrap(mutable)]
@@ -160,7 +160,7 @@ impl Chunk {
             self.write(OpCode::Constant, line);
             self.write(short_index, line);
             true
-        } else if !crate::config::is_std_mode() {
+        } else if !config::STD_MODE.load() {
             self.write(OpCode::ConstantLong, line);
             self.write_24bit_number(*long_index, line)
         } else {

@@ -11,6 +11,7 @@ use crate::{
     arena::{Arena, StringId},
     chunk::{Chunk, CodeOffset, ConstantLongIndex},
     compiler::rules::{make_rules, Rules},
+    config,
     scanner::{Scanner, Token, TokenKind},
     types::Line,
     value::Function,
@@ -123,8 +124,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     fn end(&mut self) {
         self.emit_return();
 
-        #[cfg(feature = "print_code")]
-        if !self.had_error {
+        if config::PRINT_CODE.load() && !self.had_error {
             println!("{:?}", self.current_chunk());
         }
     }

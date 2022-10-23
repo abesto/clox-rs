@@ -5,12 +5,12 @@ use std::{
 
 use hashbrown::HashMap;
 
-#[cfg(feature = "trace_execution")]
 use crate::chunk::InstructionDisassembler;
 use crate::{
     arena::{Arena, StringId},
     chunk::{CodeOffset, OpCode},
     compiler::Compiler,
+    config,
     scanner::Scanner,
     value::{Function, NativeFunction, NativeFunctionImpl, Value},
 };
@@ -95,9 +95,9 @@ impl VM {
     }
 
     fn run(&mut self) -> InterpretResult {
+        let trace_execution = config::TRACE_EXECUTION.load();
         loop {
-            #[cfg(feature = "trace_execution")]
-            {
+            if trace_execution {
                 let function = &self.frame().function;
                 let mut disassembler = InstructionDisassembler::new(&function.chunk);
                 *disassembler.offset = self.frame().ip;
@@ -226,7 +226,7 @@ impl VM {
                 self.stack_push(new_string_id.into());
             }
             args => {
-                if crate::config::is_std_mode() {
+                if config::STD_MODE.load() {
                     runtime_error!(self, "Operands must be two numbers or two strings.");
                 } else {
                     runtime_error!(

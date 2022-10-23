@@ -19,17 +19,25 @@ mod vm;
 #[derive(Parser, Debug)]
 #[command(version)]
 struct Args {
+    file: Option<PathBuf>,
+
     /// Standards mode: compatibility with standard `clox`. Passes the standard `clox` test suite.
     #[arg(long)]
     std: bool,
 
-    file: Option<PathBuf>,
+    #[arg(long)]
+    trace_execution: bool,
+
+    #[arg(long)]
+    print_code: bool,
 }
 
 fn main() {
     let args = Args::parse();
 
-    config::set_std_mode(args.std);
+    config::STD_MODE.store(args.std);
+    config::TRACE_EXECUTION.store(args.trace_execution);
+    config::PRINT_CODE.store(args.print_code);
 
     if let Some(path) = args.file {
         run_file(path);
