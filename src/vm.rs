@@ -1,11 +1,9 @@
-use std::{
-    rc::Rc,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::rc::Rc;
 
 use hashbrown::HashMap;
 
 use crate::chunk::InstructionDisassembler;
+use crate::native_functions::NativeFunctions;
 use crate::{
     arena::{Arena, StringId},
     chunk::{CodeOffset, OpCode},
@@ -64,22 +62,24 @@ pub struct VM {
 impl VM {
     #[must_use]
     pub fn new() -> Self {
-        let mut vm = Self {
+        Self {
             arena: Arena::new(),
             frames: Vec::with_capacity(crate::config::FRAMES_MAX),
             stack: Vec::with_capacity(crate::config::STACK_MAX),
             globals: HashMap::new(),
-        };
-
-        vm.define_native("clock", 0, clock_native);
-        vm.define_native("sqrt", 1, sqrt_native);
-
-        vm
+        }
     }
 
     pub fn interpret(&mut self, source: &[u8]) -> InterpretResult {
         let scanner = Scanner::new(source);
-        let result = if let Some(function) = Compiler::compile(scanner, &mut self.arena) {
+
+        let mut native_functions = NativeFunctions::new();
+        native_functions.create_names(&mut self.arena);
+        let mut compiler = Compiler::new(scanner, &mut self.arena);
+        native_functions.register_names(&mut compiler);
+
+        let result = if let Some(function) = compiler.compile() {
+            native_functions.define_functions(self);
             let function = Rc::new(function);
             self.stack_push(Value::Function(Rc::clone(&function)));
             self.execute_call(function, 0);
@@ -220,6 +220,7 @@ impl VM {
                 self.stack.pop();
             }
             [Value::String(a), Value::String(b)] => {
+                // This could be optimized by allowing mutations via the arena
                 let new_string_id = self.arena.add_string(format!("{}{}", **a, **b));
                 self.stack.pop();
                 self.stack.pop();
@@ -546,13 +547,9 @@ impl VM {
         true
     }
 
-    pub fn define_native<S>(&mut self, name: S, arity: u8, fun: NativeFunctionImpl)
-    where
-        S: ToString,
-    {
-        let string_id = self.arena.add_string(name.to_string());
+    pub fn define_native(&mut self, name: StringId, arity: u8, fun: NativeFunctionImpl) {
         self.globals.insert(
-            string_id,
+            name,
             Global {
                 value: Value::NativeFunction(NativeFunction {
                     name: name.to_string(),
@@ -562,22 +559,5 @@ impl VM {
                 mutable: false,
             },
         );
-    }
-}
-
-fn clock_native(_args: &mut [Value]) -> Result<Value, String> {
-    Ok(Value::Number(
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs_f64(),
-    ))
-}
-
-fn sqrt_native(args: &mut [Value]) -> Result<Value, String> {
-    match args {
-        [Value::Number(n)] => Ok(n.sqrt().into()),
-        [x] => Err(format!("'sqrt' expected numeric argument, got: {}", x)),
-        _ => unreachable!(),
     }
 }

@@ -75,7 +75,7 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
         let line = self.line();
 
         let function = {
-            let mut compiler = Compiler::new(
+            let mut compiler = Compiler::new_(
                 self.scanner.clone(),
                 self.arena,
                 self.previous.as_ref().unwrap().as_str(),

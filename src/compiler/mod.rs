@@ -61,7 +61,12 @@ pub struct Compiler<'scanner, 'arena> {
 
 impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     #[must_use]
-    fn new<S>(
+    pub fn new(scanner: Scanner<'scanner>, arena: &'arena mut Arena) -> Self {
+        Self::new_(scanner, arena, "<script>", FunctionType::Script)
+    }
+
+    #[must_use]
+    fn new_<S>(
         scanner: Scanner<'scanner>,
         arena: &'arena mut Arena,
         function_name: S,
@@ -101,7 +106,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         compiler
     }
 
-    fn compile_(mut self) -> Option<Function> {
+    pub fn compile(mut self) -> Option<Function> {
         self.advance();
 
         while !self.match_(TokenKind::Eof) {
@@ -114,11 +119,6 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         } else {
             Some(self.current_function)
         }
-    }
-
-    pub fn compile(scanner: Scanner<'scanner>, arena: &'arena mut Arena) -> Option<Function> {
-        let compiler = Compiler::new(scanner, arena, "<script>", FunctionType::Script);
-        compiler.compile_()
     }
 
     fn end(&mut self) {
@@ -135,5 +135,11 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
 
     pub(super) fn current_chunk_len(&mut self) -> usize {
         self.current_chunk().code().len()
+    }
+
+    pub fn inject_strings(&mut self, names: &HashMap<String, StringId>) {
+        for (key, value) in names {
+            self.strings_by_name.insert(key.clone(), *value);
+        }
     }
 }

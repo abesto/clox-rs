@@ -11,6 +11,7 @@ mod bitwise;
 mod chunk;
 mod compiler;
 mod config;
+mod native_functions;
 mod scanner;
 mod types;
 mod value;
