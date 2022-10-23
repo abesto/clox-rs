@@ -20,12 +20,13 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * `StackFrame::function` is a pointer to an `ObjFunction` in C. In Rust, we can't "just" stuff in a pointer. At a first approximation, I'll use `Rc<RefCell>` for storing `Function` instances. I considered `Weak` for storage in `CallFrame`s, but it doesn't really give any performance improvements I think (they need to be `updrade`ed when used *anyway*).
 * The book handles the stack of compilers with an explicit linked list, and lets globals implicitly take care of shared state. Instead, we use the Rust call stack to handle the compiler stack, and explicitly fork / join shared state.
 * Most `Obj*` things in the book map to a `Value` variant. `Closure` is an exception: `ObjFunction` maps to `Function`, and `ObjClosure` maps to `Value::Function`.
-* Storing a pointer to a variable in an `Upvalue` is problematic in the naive implementation of `Value` where all `Value` instances live on the (Rust) stack and are owned by the `VM::stack` or `VM::globals`. To get around this, I skipped over `Upvalue`s to do a memory management refactor + GC first. 
+* Storing a pointer to a variable in an `Upvalue` is problematic in the naive implementation of `Value` where all `Value` instances live on the (Rust) stack and are owned by the `VM::stack` or `VM::globals`. To get around this, I skipped over `Upvalue`s to do a memory management refactor first. 
 
 # TODO
 
 * Drop the VM stack after we're done interpreting a piece of code. In the REPL, stuff can stay there after runtime errors.
 * Manage memory for `Function`s through `Arena` instead of `Rc` (possibly: DRY the implementation of `Arena`)
+* Possible optimization: copy-on-write for `Value`s stored in the `Arena`
 
 # Challenges
 
@@ -91,3 +92,5 @@ Summary
   * vs [`jlox-rs`](https://github.com/abesto/jlox-rs): 4.39 ± 0.07 times faster
   * vs `clox` proper: 3.32 ± 0.07 times slower
     * Two biggest offenders seems like `Value::clone` (called a lot when reading globals) and `core::ptr::drop_in_place` (executed a lot inside `VM::add` on `*stack_item = (stack_item.as_f64() + *b).into();` for some reason)
+* After switching memory management to an `Arena`: 4.59 ± 0.18 times slower than `clox`
+  * Most of the (new) time is spent in `Vec::push` in `Arena::add_value`. CoW would probably help with this a lot.
