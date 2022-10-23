@@ -79,4 +79,15 @@ impl<'a> Compiler<'a> {
         self.emit_byte((offset >> 8) as u8);
         self.emit_byte(offset as u8);
     }
+
+    pub(super) fn emit_number(&mut self, n: usize, long: bool) -> bool {
+        if long {
+            self.emit_24bit_number(n)
+        } else if let Ok(n) = u8::try_from(n) {
+            self.emit_byte(n);
+            true
+        } else {
+            false
+        }
+    }
 }

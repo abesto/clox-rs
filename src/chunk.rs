@@ -84,6 +84,18 @@ impl OpCode {
                 | SetLocalLong => 3,
             }
     }
+
+    pub fn to_long(self) -> OpCode {
+        match self {
+            OpCode::GetLocal => OpCode::GetLocalLong,
+            OpCode::GetGlobal => OpCode::GetGlobalLong,
+            OpCode::SetLocal => OpCode::SetLocalLong,
+            OpCode::SetGlobal => OpCode::SetGlobalLong,
+            OpCode::DefineGlobal => OpCode::DefineGlobalLong,
+            OpCode::DefineGlobalConst => OpCode::DefineGlobalConstLong,
+            x => x,
+        }
+    }
 }
 
 #[derive(PartialEq, Derivative, Clone)]

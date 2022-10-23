@@ -25,51 +25,41 @@ impl<'a> Compiler<'a> {
     where
         S: ToString,
     {
-        let local_index = self.resolve_local(name.to_string());
-        let global_index = if local_index.is_some() {
-            None
+        let mut get_op = OpCode::GetLocal;
+        let mut set_op = OpCode::SetLocal;
+        let mut arg = self.resolve_local(name.to_string());
+
+        // Local or global?
+        if arg.is_none() {
+            arg = Some(*self.identifier_constant(name));
+            get_op = OpCode::GetGlobal;
+            set_op = OpCode::SetGlobal;
+        }
+        let arg = arg.unwrap();
+
+        // Support for more than u8::MAX variables in a scope
+        let long = if !crate::config::is_std_mode() && arg > u8::MAX.into() {
+            get_op = get_op.to_long();
+            set_op = set_op.to_long();
+            true
         } else {
-            Some(*self.identifier_constant(name))
+            false
         };
 
+        // Get or set?
         let op = if can_assign && self.match_(TK::Equal) {
             self.expression();
-            if let Some(global_index) = global_index {
-                if global_index > u8::MAX.into() {
-                    OpCode::SetGlobalLong
-                } else {
-                    OpCode::SetGlobal
-                }
-            } else {
-                let local_index = local_index.unwrap();
-                let local = &self.locals[local_index];
-                if *local.depth != -1 && !local.mutable {
-                    self.error("Reassignment to local 'const'.");
-                }
-                if local_index > u8::MAX.into() {
-                    OpCode::SetLocalLong
-                } else {
-                    OpCode::SetLocal
-                }
+            if set_op == OpCode::SetLocal || set_op == OpCode::SetLocalLong {
+                self.check_local_const(arg);
             }
-        } else if let Some(global_index) = global_index {
-            if global_index > u8::MAX.into() {
-                OpCode::GetGlobalLong
-            } else {
-                OpCode::GetGlobal
-            }
-        } else if local_index.unwrap() > u8::MAX.into() {
-            OpCode::GetLocalLong
+            set_op
         } else {
-            OpCode::GetLocal
+            get_op
         };
 
+        // Generate the code.
         self.emit_byte(op);
-
-        let arg = local_index.map(usize::from).or(global_index).unwrap();
-        if let Ok(short_arg) = u8::try_from(arg) {
-            self.emit_byte(short_arg);
-        } else if !self.emit_24bit_number(arg) {
+        if !self.emit_number(arg, long) {
             self.error(&format!("Too many globals in {:?}", op));
         }
     }
@@ -210,5 +200,12 @@ impl<'a> Compiler<'a> {
         }
         self.consume(TK::RightParen, "Expect ')' after arguments.");
         arg_count
+    }
+
+    fn check_local_const(&mut self, local_index: usize) {
+        let local = &self.locals[local_index];
+        if *local.depth != -1 && !local.mutable {
+            self.error("Reassignment to local 'const'.");
+        }
     }
 }
