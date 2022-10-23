@@ -89,7 +89,8 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         if let Some(index) = self.globals_by_name.get(&string_id) {
             *index
         } else {
-            let index = self.current_chunk().make_constant(string_id.into());
+            let value_id = self.arena.add_value(string_id.into());
+            let index = self.current_chunk().make_constant(value_id);
             self.globals_by_name.insert(string_id, index);
             index
         }

@@ -3,7 +3,11 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use paste::paste;
 use shrinkwraprs::Shrinkwrap;
 
-use crate::{arena::StringId, config, types::Line, value::Value};
+use crate::{
+    arena::{StringId, ValueId},
+    config,
+    types::Line,
+};
 
 #[derive(Shrinkwrap, Clone, Copy)]
 #[shrinkwrap(mutable)]
@@ -98,14 +102,14 @@ impl OpCode {
     }
 }
 
-#[derive(PartialEq, Derivative, Clone)]
+#[derive(PartialEq, Eq, Derivative, Clone)]
 #[derivative(PartialOrd)]
 pub struct Chunk {
     name: StringId,
     pub code: Vec<u8>,
     #[derivative(PartialOrd = "ignore")]
     lines: Vec<(usize, Line)>,
-    constants: Vec<Value>,
+    constants: Vec<ValueId>,
 }
 
 impl Chunk {
@@ -122,7 +126,7 @@ impl Chunk {
         &self.code
     }
 
-    pub fn get_constant<T>(&self, index: T) -> &Value
+    pub fn get_constant<T>(&self, index: T) -> &ValueId
     where
         T: Into<usize>,
     {
@@ -149,12 +153,12 @@ impl Chunk {
         self.code[*offset] = what.into();
     }
 
-    pub fn make_constant(&mut self, what: Value) -> ConstantLongIndex {
+    pub fn make_constant(&mut self, what: ValueId) -> ConstantLongIndex {
         self.constants.push(what);
         ConstantLongIndex(self.constants.len() - 1)
     }
 
-    pub fn write_constant(&mut self, what: Value, line: Line) -> bool {
+    pub fn write_constant(&mut self, what: ValueId, line: Line) -> bool {
         let long_index = self.make_constant(what);
         if let Ok(short_index) = u8::try_from(*long_index) {
             self.write(OpCode::Constant, line);
@@ -222,7 +226,7 @@ impl<'chunk> InstructionDisassembler<'chunk> {
             "{:-16} {:>4} '{}'",
             name,
             *constant_index,
-            self.chunk.get_constant(*constant_index.as_ref())
+            **self.chunk.get_constant(*constant_index.as_ref())
         )
     }
 
@@ -243,7 +247,7 @@ impl<'chunk> InstructionDisassembler<'chunk> {
             "{:-16} {:>4} '{}'",
             name,
             *constant_index,
-            self.chunk.get_constant(*constant_index.as_ref())
+            **self.chunk.get_constant(*constant_index.as_ref())
         )
     }
 

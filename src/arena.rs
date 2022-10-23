@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 use derivative::Derivative;
 
@@ -17,6 +17,28 @@ impl Deref for StringId {
 
     fn deref(&self) -> &Self::Target {
         unsafe { self.arena.as_ref().unwrap().get_string(self) }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialOrd, Derivative)]
+#[derivative(Hash, PartialEq, Eq)]
+pub struct ValueId {
+    id: usize,
+    #[derivative(Hash = "ignore")]
+    arena: *mut Arena, // Yes this is terrible, yes I'm OK with it for this project
+}
+
+impl Deref for ValueId {
+    type Target = Value;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.arena.as_ref().unwrap().get_value(self) }
+    }
+}
+
+impl DerefMut for ValueId {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { self.arena.as_mut().unwrap().get_value_mut(self) }
     }
 }
 
@@ -43,6 +65,25 @@ impl Arena {
     }
 
     pub fn get_string(&self, id: &StringId) -> &String {
+        debug_assert_eq!(id.arena, self);
         &self.strings[id.id]
+    }
+
+    pub fn add_value(&mut self, v: Value) -> ValueId {
+        self.values.push(v);
+        ValueId {
+            id: self.values.len() - 1,
+            arena: &mut *self,
+        }
+    }
+
+    pub fn get_value(&self, id: &ValueId) -> &Value {
+        debug_assert_eq!(id.arena.cast_const(), self);
+        &self.values[id.id]
+    }
+
+    pub fn get_value_mut(&mut self, id: &ValueId) -> &mut Value {
+        debug_assert_eq!(id.arena.cast_const(), self);
+        &mut self.values[id.id]
     }
 }

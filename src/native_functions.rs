@@ -9,7 +9,7 @@ use crate::{
     vm::VM,
 };
 
-fn clock_native(_args: &mut [Value]) -> Result<Value, String> {
+fn clock_native(_args: &[Value]) -> Result<Value, String> {
     Ok(Value::Number(
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -18,7 +18,7 @@ fn clock_native(_args: &mut [Value]) -> Result<Value, String> {
     ))
 }
 
-fn sqrt_native(args: &mut [Value]) -> Result<Value, String> {
+fn sqrt_native(args: &[Value]) -> Result<Value, String> {
     match args {
         [Value::Number(n)] => Ok(n.sqrt().into()),
         [x] => Err(format!("'sqrt' expected numeric argument, got: {}", x)),

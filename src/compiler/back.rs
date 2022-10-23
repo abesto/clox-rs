@@ -38,7 +38,8 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
         T: Into<Value>,
     {
         let line = self.line();
-        if !self.current_chunk().write_constant(value.into(), line) {
+        let value_id = self.arena.add_value(value.into());
+        if !self.current_chunk().write_constant(value_id, line) {
             self.error("Too many constants in one chunk.");
         }
     }

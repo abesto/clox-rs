@@ -117,8 +117,8 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
             compiler.current_function
         };
 
-        self.current_chunk()
-            .write_constant(Value::from(function), line);
+        let value_id = self.arena.add_value(Value::from(function));
+        self.current_chunk().write_constant(value_id, line);
     }
 
     fn fun_declaration(&mut self) {

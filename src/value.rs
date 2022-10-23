@@ -62,16 +62,9 @@ impl Value {
     pub fn is_falsey(&self) -> bool {
         matches!(self, Self::Bool(false) | Self::Nil)
     }
-
-    pub fn as_f64(&self) -> f64 {
-        match self {
-            Self::Number(num) => *num,
-            _ => panic!("as_64() called on non-Number Value"),
-        }
-    }
 }
 
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
 pub struct Function {
     pub arity: usize,
     pub chunk: Chunk,
@@ -104,7 +97,7 @@ pub struct NativeFunction {
     pub fun: NativeFunctionImpl,
 }
 
-pub type NativeFunctionImpl = fn(&mut [Value]) -> Result<Value, String>;
+pub type NativeFunctionImpl = fn(&[Value]) -> Result<Value, String>;
 
 fn always_equals<T>(_: &T, _: &T) -> bool {
     true

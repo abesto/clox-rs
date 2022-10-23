@@ -1,7 +1,9 @@
+use std::pin::Pin;
 use std::rc::Rc;
 
 use hashbrown::HashMap;
 
+use crate::arena::ValueId;
 use crate::chunk::InstructionDisassembler;
 use crate::native_functions::NativeFunctions;
 use crate::{
@@ -42,7 +44,7 @@ macro_rules! binary_op {
 type BinaryOp<T> = fn(f64, f64) -> T;
 
 struct Global {
-    value: Value,
+    value: ValueId,
     mutable: bool,
 }
 
@@ -52,18 +54,46 @@ pub struct CallFrame {
     stack_base: usize,
 }
 
+struct BuiltinConstants {
+    pub nil: ValueId,
+    pub true_: ValueId,
+    pub false_: ValueId,
+}
+
+impl BuiltinConstants {
+    #[must_use]
+    pub fn new(arena: &mut Arena) -> Self {
+        Self {
+            nil: arena.add_value(Value::Nil),
+            true_: arena.add_value(Value::Bool(true)),
+            false_: arena.add_value(Value::Bool(false)),
+        }
+    }
+
+    pub fn bool(&self, val: bool) -> ValueId {
+        if val {
+            self.true_
+        } else {
+            self.false_
+        }
+    }
+}
+
 pub struct VM {
-    arena: Arena,
+    arena: Pin<Box<Arena>>,
+    builtin_constants: BuiltinConstants,
     frames: Vec<CallFrame>,
-    stack: Vec<Value>,
+    stack: Vec<ValueId>,
     globals: HashMap<StringId, Global>,
 }
 
 impl VM {
     #[must_use]
     pub fn new() -> Self {
+        let mut arena = Pin::new(Box::new(Arena::new()));
         Self {
-            arena: Arena::new(),
+            builtin_constants: BuiltinConstants::new(&mut arena),
+            arena,
             frames: Vec::with_capacity(crate::config::FRAMES_MAX),
             stack: Vec::with_capacity(crate::config::STACK_MAX),
             globals: HashMap::new(),
@@ -81,7 +111,7 @@ impl VM {
         let result = if let Some(function) = compiler.compile() {
             native_functions.define_functions(self);
             let function = Rc::new(function);
-            self.stack_push(Value::Function(Rc::clone(&function)));
+            self.stack_push_value(Value::Function(Rc::clone(&function)));
             self.execute_call(function, 0);
             self.run()
         } else {
@@ -105,7 +135,7 @@ impl VM {
                     "          [{}]",
                     self.stack
                         .iter()
-                        .map(|v| format!("{}", v))
+                        .map(|v| format!("{}", **v))
                         .collect::<Vec<_>>()
                         .join(", ")
                 );
@@ -115,17 +145,17 @@ impl VM {
                 .expect("Internal error: unrecognized opcode")
             {
                 OpCode::Print => {
-                    println!("{}", self.stack.pop().expect("stack underflow in OP_PRINT"));
+                    println!(
+                        "{}",
+                        *self.stack.pop().expect("stack underflow in OP_PRINT")
+                    );
                 }
                 OpCode::Pop => {
                     self.stack.pop().expect("stack underflow in OP_POP");
                 }
                 OpCode::Dup => {
-                    self.stack_push(
-                        self.stack
-                            .last()
-                            .expect("stack underflow in OP_DUP")
-                            .clone(),
+                    self.stack_push_value(
+                        (**self.stack.last().expect("stack underflow in OP_DUP")).clone(),
                     );
                 }
                 op @ (OpCode::GetLocal | OpCode::GetLocalLong) => self.get_local(op),
@@ -168,20 +198,20 @@ impl VM {
                     }
                 }
                 OpCode::Constant => {
-                    let value = self.read_constant(false).clone();
+                    let value = *self.read_constant(false);
                     self.stack_push(value);
                 }
                 OpCode::ConstantLong => {
-                    let value = self.read_constant(true).clone();
+                    let value = *self.read_constant(true);
                     self.stack_push(value);
                 }
                 OpCode::Closure => {
-                    let value = self.read_constant(true).clone();
+                    let value = *self.read_constant(true);
                     self.stack_push(value);
                 }
-                OpCode::Nil => self.stack_push(Value::Nil),
-                OpCode::True => self.stack_push(Value::Bool(true)),
-                OpCode::False => self.stack_push(Value::Bool(false)),
+                OpCode::Nil => self.stack_push(self.builtin_constants.nil),
+                OpCode::True => self.stack_push(self.builtin_constants.true_),
+                OpCode::False => self.stack_push(self.builtin_constants.false_),
 
                 OpCode::Negate => {
                     if let Some(value) = self.negate() {
@@ -214,47 +244,58 @@ impl VM {
 
     fn add(&mut self) -> Option<InterpretResult> {
         let slice_start = self.stack.len() - 2;
-        match &mut self.stack[slice_start..] {
-            [stack_item @ Value::Number(_), Value::Number(b)] => {
-                *stack_item = (stack_item.as_f64() + *b).into();
-                self.stack.pop();
-            }
-            [Value::String(a), Value::String(b)] => {
-                // This could be optimized by allowing mutations via the arena
-                let new_string_id = self.arena.add_string(format!("{}{}", **a, **b));
-                self.stack.pop();
-                self.stack.pop();
-                self.stack_push(new_string_id.into());
-            }
-            args => {
-                if config::STD_MODE.load() {
-                    runtime_error!(self, "Operands must be two numbers or two strings.");
-                } else {
-                    runtime_error!(
-                        self,
-                        "Operands must be two numbers or two strings. Got: [{}]",
-                        args.iter()
-                            .map(|v| format!("{}", v))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    );
+
+        let ok = match &mut self.stack[slice_start..] {
+            [left, right] => match (&mut **left, &**right) {
+                (Value::Number(a), Value::Number(b)) => {
+                    let value = (*a + *b).into();
+                    self.stack.pop();
+                    self.stack.pop();
+                    self.stack_push_value(value);
+                    true
                 }
-                return Some(InterpretResult::RuntimeError);
+                (Value::String(a), Value::String(b)) => {
+                    // This could be optimized by allowing mutations via the arena
+                    let new_string_id = self.arena.add_string(format!("{}{}", **a, **b));
+                    self.stack.pop();
+                    self.stack.pop();
+                    self.stack_push_value(new_string_id.into());
+                    true
+                }
+                _ => false,
+            },
+            _ => false,
+        };
+
+        if !ok {
+            if config::STD_MODE.load() {
+                runtime_error!(self, "Operands must be two numbers or two strings.");
+            } else {
+                runtime_error!(
+                    self,
+                    "Operands must be two numbers or two strings. Got: [{}]",
+                    self.stack[slice_start..]
+                        .iter()
+                        .map(|v| format!("{}", **v))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
             }
+            return Some(InterpretResult::RuntimeError);
         }
         None
     }
 
     fn equal(&mut self) {
-        let value = self
+        let value = *self
             .stack
             .pop()
             .expect("stack underflow in OP_EQUAL (first)")
-            == self
+            == *self
                 .stack
                 .pop()
                 .expect("stack underflow in OP_EQUAL (second)");
-        self.stack_push(value.into());
+        self.stack_push(self.builtin_constants.bool(value));
     }
 
     fn not_(&mut self) {
@@ -263,11 +304,11 @@ impl VM {
             .pop()
             .expect("stack underflow in OP_NOT")
             .is_falsey();
-        self.stack_push(value.into());
+        self.stack_push(self.builtin_constants.bool(value));
     }
 
     fn negate(&mut self) -> Option<InterpretResult> {
-        let value = self.stack.last_mut().expect("stack underflow in OP_NEGATE");
+        let value = &mut **self.stack.last_mut().expect("stack underflow in OP_NEGATE");
         match value {
             Value::Number(n) => *n = -*n,
             _ => {
@@ -291,17 +332,16 @@ impl VM {
     }
 
     fn define_global(&mut self, op: OpCode) {
-        match self.read_constant(op == OpCode::DefineGlobalLong) {
+        match &**self.read_constant(op == OpCode::DefineGlobalLong) {
             Value::String(name) => {
                 let name = *name;
                 self.globals.insert(
                     name,
                     Global {
-                        value: self
+                        value: *self
                             .stack
                             .last()
-                            .unwrap_or_else(|| panic!("stack underflow in {:?}", op))
-                            .clone(),
+                            .unwrap_or_else(|| panic!("stack underflow in {:?}", op)),
                         mutable: op != OpCode::DefineGlobalConst
                             && op != OpCode::DefineGlobalConstLong,
                     },
@@ -332,10 +372,8 @@ impl VM {
 
     fn call(&mut self) -> Option<InterpretResult> {
         let arg_count = self.read_byte("Internal error: missing operand for OP_CALL");
-        if !self.call_value(
-            self.stack[self.stack.len() - 1 - usize::from(arg_count)].clone(),
-            arg_count,
-        ) {
+        let callee = self.stack[self.stack.len() - 1 - usize::from(arg_count)];
+        if !self.call_value(callee, arg_count) {
             return Some(InterpretResult::RuntimeError);
         }
         None
@@ -343,36 +381,37 @@ impl VM {
 
     fn set_global(&mut self, op: OpCode) -> Option<InterpretResult> {
         let constant_index = self.read_constant_index(op == OpCode::SetGlobalLong);
-        match self.read_constant_value(constant_index).clone() {
-            Value::String(name) => {
-                if let Some(global) = self.globals.get_mut(&name) {
-                    if !global.mutable {
-                        runtime_error!(self, "Reassignment to global 'const'.");
-                        return Some(InterpretResult::RuntimeError);
-                    }
-                    global.value = self
-                        .stack
-                        .last()
-                        .unwrap_or_else(|| panic!("stack underflow in {:?}", op))
-                        .clone();
-                } else {
-                    runtime_error!(self, "Undefined variable '{}'.", *name);
-                    return Some(InterpretResult::RuntimeError);
-                }
-            }
+
+        let name = match &**self.read_constant_value(constant_index) {
+            Value::String(name) => *name,
             x => panic!(
                 "Internal error: non-string operand to OP_SET_GLOBAL: {:?}",
                 x
             ),
+        };
+
+        if let Some(global) = self.globals.get_mut(&name) {
+            if !global.mutable {
+                runtime_error!(self, "Reassignment to global 'const'.");
+                return Some(InterpretResult::RuntimeError);
+            }
+            global.value = *self
+                .stack
+                .last()
+                .unwrap_or_else(|| panic!("stack underflow in {:?}", op));
+        } else {
+            runtime_error!(self, "Undefined variable '{}'.", *name);
+            return Some(InterpretResult::RuntimeError);
         }
+
         None
     }
 
     fn get_global(&mut self, op: OpCode) -> Option<InterpretResult> {
         let constant_index = self.read_constant_index(op == OpCode::GetGlobalLong);
-        match self.read_constant_value(constant_index) {
+        match &**self.read_constant_value(constant_index) {
             Value::String(name) => match self.globals.get(name) {
-                Some(global) => self.stack_push(global.value.clone()),
+                Some(global) => self.stack_push(global.value),
                 None => {
                     runtime_error!(self, "Undefined variable '{}'.", **name);
                     return Some(InterpretResult::RuntimeError);
@@ -389,11 +428,7 @@ impl VM {
         } else {
             usize::from(self.read_byte("Internal error: missing operand for OP_SET_LOCAL"))
         };
-        *self.stack_get_mut(slot) = self
-            .stack
-            .last()
-            .expect("stack underflow in OP_SET_LOCAL")
-            .clone();
+        *self.stack_get_mut(slot) = *self.stack.last().expect("stack underflow in OP_SET_LOCAL");
     }
 
     fn get_local(&mut self, op: OpCode) {
@@ -402,7 +437,7 @@ impl VM {
         } else {
             usize::from(self.read_byte("Internal error: missing operand for OP_GET_LOCAL"))
         };
-        self.stack_push(self.stack_get(slot).clone());
+        self.stack_push(*self.stack_get(slot));
     }
 
     fn read_byte(&mut self, msg: &str) -> u8 {
@@ -430,33 +465,42 @@ impl VM {
         }
     }
 
-    fn read_constant_value(&self, index: usize) -> &Value {
+    fn read_constant_value(&self, index: usize) -> &ValueId {
         self.frame().function.chunk.get_constant(index)
     }
 
-    fn read_constant(&mut self, long: bool) -> &Value {
+    fn read_constant(&mut self, long: bool) -> &ValueId {
         let index = self.read_constant_index(long);
         self.read_constant_value(index)
     }
 
     fn binary_op<T: Into<Value>>(&mut self, op: BinaryOp<T>) -> bool {
         let slice_start = self.stack.len() - 2;
-        match &mut self.stack[slice_start..] {
-            [stack_item @ Value::Number(_), Value::Number(b)] => {
-                *stack_item = op(stack_item.as_f64(), *b).into();
-                self.stack.pop();
+
+        let ok = match &mut self.stack[slice_start..] {
+            [left, right] => {
+                if let (Value::Number(a), Value::Number(b)) = (&**left, &**right) {
+                    let value = op(*a, *b).into();
+                    self.stack.pop();
+                    self.stack.pop();
+                    self.stack_push_value(value);
+                    true
+                } else {
+                    false
+                }
             }
-            _ => {
-                runtime_error!(self, "Operands must be numbers.");
-                return false;
-            }
+            _ => false,
+        };
+
+        if !ok {
+            runtime_error!(self, "Operands must be numbers.");
         }
-        true
+        ok
     }
 
     #[inline]
-    fn stack_push(&mut self, value: Value) {
-        self.stack.push(value);
+    fn stack_push(&mut self, value_id: ValueId) {
+        self.stack.push(value_id);
         // This check has a pretty big performance overhead; disabled for now
         // TODO find a better way: keep the check and minimize overhead
         /*
@@ -466,11 +510,17 @@ impl VM {
         */
     }
 
-    fn stack_get(&self, slot: usize) -> &Value {
+    #[inline]
+    fn stack_push_value(&mut self, value: Value) {
+        let value_id = self.arena.add_value(value);
+        self.stack.push(value_id);
+    }
+
+    fn stack_get(&self, slot: usize) -> &ValueId {
         &self.stack[self.stack_base() + slot]
     }
 
-    fn stack_get_mut(&mut self, slot: usize) -> &mut Value {
+    fn stack_get_mut(&mut self, slot: usize) -> &mut ValueId {
         let offset = self.stack_base();
         &mut self.stack[offset + slot]
     }
@@ -490,11 +540,11 @@ impl VM {
         self.frame().stack_base
     }
 
-    fn call_value(&mut self, callee: Value, arg_count: u8) -> bool {
-        match callee {
-            Value::Function(f) => self.execute_call(f, arg_count),
+    fn call_value(&mut self, callee: ValueId, arg_count: u8) -> bool {
+        match &*callee {
+            Value::Function(f) => self.execute_call(Rc::clone(f), arg_count),
             Value::NativeFunction(NativeFunction { fun, arity, name }) => {
-                if arg_count != arity {
+                if arg_count != *arity {
                     runtime_error!(
                         self,
                         "Native function '{}' expected {} arguments, got {}.",
@@ -505,11 +555,15 @@ impl VM {
                     false
                 } else {
                     let start_index = self.stack.len() - usize::from(arg_count);
-                    match fun(&mut self.stack[start_index..]) {
+                    let args = self.stack[start_index..]
+                        .iter()
+                        .map(|v| (**v).clone())
+                        .collect::<Vec<_>>();
+                    match fun(&args) {
                         Ok(value) => {
                             self.stack
                                 .truncate(self.stack.len() - usize::from(arg_count) - 1);
-                            self.stack_push(value);
+                            self.stack_push_value(value);
                             true
                         }
                         Err(e) => {
@@ -548,14 +602,17 @@ impl VM {
     }
 
     pub fn define_native(&mut self, name: StringId, arity: u8, fun: NativeFunctionImpl) {
+        let value = Value::NativeFunction(NativeFunction {
+            name: name.to_string(),
+            arity,
+            fun,
+        });
+        let value_id = self.arena.add_value(value);
+
         self.globals.insert(
             name,
             Global {
-                value: Value::NativeFunction(NativeFunction {
-                    name: name.to_string(),
-                    arity,
-                    fun,
-                }),
+                value: value_id,
                 mutable: false,
             },
         );
