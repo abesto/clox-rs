@@ -50,6 +50,9 @@ pub(super) struct SharedCompilerState<'scanner, 'arena> {
 
     had_error: bool,
     panic_mode: bool,
+
+    /// The inner `Vec` is the locals of a compiler. The stack corresponds to nested (function) compilers.
+    locals_stack: Vec<Vec<Local<'scanner>>>,
 }
 
 pub struct Compiler<'scanner, 'arena> {
@@ -59,7 +62,6 @@ pub struct Compiler<'scanner, 'arena> {
     function_type: FunctionType,
 
     rules: Rules<'scanner, 'arena>,
-    locals: Vec<Local<'scanner>>,
     scope_depth: ScopeDepth,
     loop_state: Option<LoopState>,
 }
@@ -76,6 +78,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
                 strings_by_name: HashMap::default(),
                 had_error: false,
                 panic_mode: false,
+                locals_stack: Vec::default(),
             })),
             "<script>",
             FunctionType::Script,
@@ -95,26 +98,34 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
             .borrow_mut()
             .arena
             .add_string(function_name.to_string());
-        let mut compiler = Compiler {
+
+        shared.borrow_mut().locals_stack.push(Vec::default());
+
+        let compiler = Compiler {
             shared,
             globals_by_name: HashMap::default(),
             current_function: Function::new(0, function_name),
             function_type,
             rules: make_rules(),
-            locals: Vec::new(),
             scope_depth: ScopeDepth(0),
             loop_state: None,
         };
 
-        compiler.locals.push(Local {
-            name: Token {
-                kind: TokenKind::Identifier,
-                lexeme: &[],
-                line: Line(0),
-            },
-            depth: ScopeDepth(0),
-            mutable: false,
-        });
+        compiler
+            .shared
+            .borrow_mut()
+            .locals_stack
+            .last_mut()
+            .unwrap()
+            .push(Local {
+                name: Token {
+                    kind: TokenKind::Identifier,
+                    lexeme: &[],
+                    line: Line(0),
+                },
+                depth: ScopeDepth(0),
+                mutable: false,
+            });
 
         compiler
     }
@@ -140,6 +151,8 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         if config::PRINT_CODE.load() && !self.shared.borrow().had_error {
             println!("{:?}", self.current_chunk());
         }
+
+        self.shared.borrow_mut().locals_stack.pop();
     }
 
     pub(super) fn current_chunk(&mut self) -> &mut Chunk {

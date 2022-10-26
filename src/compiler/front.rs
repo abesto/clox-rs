@@ -100,6 +100,7 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
                 .unwrap()
                 .as_str()
                 .to_string();
+
             let mut compiler =
                 Compiler::new_(Rc::clone(&self.shared), function_name, function_type);
 
@@ -320,7 +321,11 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
                 self.consume(TK::Semicolon, "Expect ';' after 'continue'.");
 
                 let locals_to_drop = self
-                    .locals
+                    .shared
+                    .borrow()
+                    .locals_stack
+                    .last()
+                    .unwrap()
                     .iter()
                     .rev()
                     .take_while(|local| local.depth > state.depth)
