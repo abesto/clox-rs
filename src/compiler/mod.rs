@@ -4,6 +4,8 @@ mod front;
 mod rules;
 mod variables;
 
+use std::{cell::RefCell, rc::Rc};
+
 use hashbrown::HashMap;
 use shrinkwraprs::Shrinkwrap;
 
@@ -39,20 +41,23 @@ struct LoopState {
     start: CodeOffset,
 }
 
-pub struct Compiler<'scanner, 'arena> {
+pub(super) struct SharedCompilerState<'scanner, 'arena> {
     arena: &'arena mut Arena,
     scanner: Scanner<'scanner>,
     previous: Option<Token<'scanner>>,
     current: Option<Token<'scanner>>,
+    strings_by_name: HashMap<String, StringId>,
 
     had_error: bool,
     panic_mode: bool,
+}
 
+pub struct Compiler<'scanner, 'arena> {
+    shared: Rc<RefCell<SharedCompilerState<'scanner, 'arena>>>,
+    globals_by_name: HashMap<StringId, ConstantLongIndex>,
     current_function: Function,
     function_type: FunctionType,
 
-    strings_by_name: HashMap<String, StringId>,
-    globals_by_name: HashMap<StringId, ConstantLongIndex>,
     rules: Rules<'scanner, 'arena>,
     locals: Vec<Local<'scanner>>,
     scope_depth: ScopeDepth,
@@ -62,31 +67,39 @@ pub struct Compiler<'scanner, 'arena> {
 impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     #[must_use]
     pub fn new(scanner: Scanner<'scanner>, arena: &'arena mut Arena) -> Self {
-        Self::new_(scanner, arena, "<script>", FunctionType::Script)
+        Self::new_(
+            Rc::new(RefCell::new(SharedCompilerState {
+                arena,
+                scanner,
+                previous: None,
+                current: None,
+                strings_by_name: HashMap::default(),
+                had_error: false,
+                panic_mode: false,
+            })),
+            "<script>",
+            FunctionType::Script,
+        )
     }
 
     #[must_use]
     fn new_<S>(
-        scanner: Scanner<'scanner>,
-        arena: &'arena mut Arena,
+        shared: Rc<RefCell<SharedCompilerState<'scanner, 'arena>>>,
         function_name: S,
         function_type: FunctionType,
     ) -> Self
     where
         S: ToString,
     {
-        let function_name = arena.add_string(function_name.to_string());
+        let function_name = shared
+            .borrow_mut()
+            .arena
+            .add_string(function_name.to_string());
         let mut compiler = Compiler {
-            arena,
+            shared,
+            globals_by_name: HashMap::default(),
             current_function: Function::new(0, function_name),
             function_type,
-            globals_by_name: HashMap::new(),
-            strings_by_name: HashMap::new(),
-            scanner,
-            previous: None,
-            current: None,
-            had_error: false,
-            panic_mode: false,
             rules: make_rules(),
             locals: Vec::new(),
             scope_depth: ScopeDepth(0),
@@ -114,7 +127,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         }
 
         self.end();
-        if self.had_error {
+        if self.shared.borrow().had_error {
             None
         } else {
             Some(self.current_function)
@@ -124,7 +137,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     fn end(&mut self) {
         self.emit_return();
 
-        if config::PRINT_CODE.load() && !self.had_error {
+        if config::PRINT_CODE.load() && !self.shared.borrow().had_error {
             println!("{:?}", self.current_chunk());
         }
     }
@@ -139,7 +152,10 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
 
     pub fn inject_strings(&mut self, names: &HashMap<String, StringId>) {
         for (key, value) in names {
-            self.strings_by_name.insert(key.clone(), *value);
+            self.shared
+                .borrow_mut()
+                .strings_by_name
+                .insert(key.clone(), *value);
         }
     }
 }

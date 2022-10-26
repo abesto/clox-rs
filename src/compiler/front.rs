@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use super::{rules::Precedence, Compiler, FunctionType, LoopState};
 use crate::{
     chunk::{CodeOffset, OpCode},
@@ -8,17 +10,30 @@ use crate::{
 
 impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
     pub(super) fn advance(&mut self) {
-        self.previous = std::mem::take(&mut self.current);
+        {
+            let mut shared = self.shared.borrow_mut();
+            shared.previous = std::mem::take(&mut shared.current);
+        }
         loop {
-            let token = self.scanner.scan();
-            self.current = Some(token);
+            {
+                let mut shared = self.shared.borrow_mut();
+                shared.current = Some(shared.scanner.scan());
+            }
             if !self.check(TK::Error) {
                 break;
             }
             // Could manually recursively inline `error_at_current` to get rid of this string copy,
             // but... this seems good enough, really.
+            let msg = self
+                .shared
+                .borrow()
+                .current
+                .as_ref()
+                .unwrap()
+                .as_str()
+                .to_string();
             #[allow(clippy::unnecessary_to_owned)]
-            self.error_at_current(&self.current.as_ref().unwrap().as_str().to_string());
+            self.error_at_current(&msg);
         }
     }
 
@@ -32,7 +47,7 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
     }
 
     pub(super) fn line(&self) -> Line {
-        self.previous.as_ref().unwrap().line
+        self.shared.borrow().previous.as_ref().unwrap().line
     }
 
     pub(super) fn match_(&mut self, kind: TK) -> bool {
@@ -44,7 +59,7 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
     }
 
     pub(super) fn current_token_kind(&self) -> Option<TK> {
-        self.current.as_ref().map(|t| t.kind)
+        self.shared.borrow().current.as_ref().map(|t| t.kind)
     }
 
     pub(super) fn check(&self, kind: TK) -> bool {
@@ -54,7 +69,9 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
     }
 
     pub(super) fn check_previous(&self, kind: TK) -> bool {
-        self.previous
+        self.shared
+            .borrow()
+            .previous
             .as_ref()
             .map(|t| t.kind == kind)
             .unwrap_or(false)
@@ -75,15 +92,16 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
         let line = self.line();
 
         let function = {
-            let mut compiler = Compiler::new_(
-                self.scanner.clone(),
-                self.arena,
-                self.previous.as_ref().unwrap().as_str(),
-                function_type,
-            );
-            compiler.current = self.current.clone();
-            compiler.previous = self.previous.clone();
-            compiler.strings_by_name = std::mem::take(&mut self.strings_by_name);
+            let function_name = self
+                .shared
+                .borrow()
+                .previous
+                .as_ref()
+                .unwrap()
+                .as_str()
+                .to_string();
+            let mut compiler =
+                Compiler::new_(Rc::clone(&self.shared), function_name, function_type);
 
             compiler.begin_scope();
             compiler.consume(TK::LeftParen, "Expect '(' after function name.");
@@ -107,17 +125,14 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
             compiler.block();
 
             compiler.end();
-
-            self.scanner = compiler.scanner;
-            self.current = compiler.current;
-            self.previous = compiler.previous;
-            self.had_error |= compiler.had_error;
-            self.panic_mode |= compiler.panic_mode;
-            self.strings_by_name = std::mem::take(&mut compiler.strings_by_name);
             compiler.current_function
         };
 
-        let value_id = self.arena.add_value(Value::from(function));
+        let value_id = self
+            .shared
+            .borrow_mut()
+            .arena
+            .add_value(Value::from(function));
         self.current_chunk().write_constant(value_id, line);
     }
 
@@ -330,7 +345,7 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
             self.statement();
         }
 
-        if self.panic_mode {
+        if self.shared.borrow().panic_mode {
             self.synchronize();
         }
     }
