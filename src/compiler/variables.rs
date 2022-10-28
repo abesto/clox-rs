@@ -1,3 +1,5 @@
+use hashbrown::hash_map::Entry;
+
 use crate::{
     arena::StringId,
     chunk::{ConstantLongIndex, OpCode},
@@ -72,16 +74,9 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     where
         S: ToString,
     {
-        let s = s.to_string();
-        if let Some(id) = {
-            let r = self.shared.borrow();
-            r.strings_by_name.get(&s).cloned()
-        } {
-            id
-        } else {
-            let id = self.shared.borrow_mut().arena.add_string(s.clone());
-            self.shared.borrow_mut().strings_by_name.insert(s, id);
-            id
+        match self.strings_by_name.entry(s.to_string()) {
+            Entry::Vacant(entry) => *entry.insert(self.arena.add_string(s.to_string())),
+            Entry::Occupied(entry) => *entry.get(),
         }
     }
 
@@ -90,12 +85,11 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         S: ToString,
     {
         let string_id = self.string_id(name);
-        let maybe_index = self.globals_by_name.get(&string_id).cloned();
 
-        if let Some(index) = maybe_index {
-            index
+        if let Some(index) = self.globals_by_name.get(&string_id) {
+            *index
         } else {
-            let value_id = self.shared.borrow_mut().arena.add_value(string_id.into());
+            let value_id = self.arena.add_value(string_id.into());
             let index = self.current_chunk().make_constant(value_id);
             self.globals_by_name.insert(string_id, index);
             index
@@ -145,7 +139,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
             return;
         }
 
-        let name = self.shared.borrow().previous.clone().unwrap();
+        let name = self.previous.clone().unwrap();
         if self.locals.iter().rev().any(|local| {
             if *local.depth != -1 && local.depth < self.scope_depth {
                 false
@@ -166,15 +160,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         if *self.scope_depth > 0 {
             None
         } else {
-            let name = self
-                .shared
-                .borrow()
-                .previous
-                .as_ref()
-                .unwrap()
-                .as_str()
-                .to_string();
-            Some(self.identifier_constant(name))
+            Some(self.identifier_constant(self.previous.as_ref().unwrap().as_str().to_string()))
         }
     }
 

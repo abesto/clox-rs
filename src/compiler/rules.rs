@@ -121,18 +121,20 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
 
     pub(super) fn parse_precedence(&mut self, precedence: Precedence) {
         self.advance();
-        let kind = self.shared.borrow().previous.as_ref().unwrap().kind;
-        if let Some(prefix_rule) = self.get_rule(kind).prefix {
+        if let Some(prefix_rule) = self.get_rule(self.previous.as_ref().unwrap().kind).prefix {
             let can_assign = precedence <= Precedence::Assignment;
             prefix_rule(self, can_assign);
 
-            while precedence < {
-                let kind = self.shared.borrow().current.as_ref().unwrap().kind;
-                self.get_rule(kind).precedence
-            } {
+            while precedence
+                < self
+                    .get_rule(self.current.as_ref().unwrap().kind)
+                    .precedence
+            {
                 self.advance();
-                let kind = self.shared.borrow().previous.as_ref().unwrap().kind;
-                let infix_rule = self.get_rule(kind).infix.unwrap();
+                let infix_rule = self
+                    .get_rule(self.previous.as_ref().unwrap().kind)
+                    .infix
+                    .unwrap();
                 infix_rule(self, can_assign);
             }
 
@@ -145,7 +147,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     }
 
     fn unary(&mut self, _can_assign: bool) {
-        let operator = self.shared.borrow().previous.as_ref().unwrap().kind;
+        let operator = self.previous.as_ref().unwrap().kind;
 
         // Compile the operand
         self.parse_precedence(Precedence::Unary);
@@ -159,7 +161,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     }
 
     fn binary(&mut self, _can_assign: bool) {
-        let operator = self.shared.borrow().previous.as_ref().unwrap().kind;
+        let operator = self.previous.as_ref().unwrap().kind;
         let rule = self.get_rule(operator);
 
         self.parse_precedence(
@@ -189,8 +191,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     }
 
     fn literal(&mut self, _can_assign: bool) {
-        let kind = self.shared.borrow().previous.as_ref().unwrap().kind;
-        match kind {
+        match self.previous.as_ref().unwrap().kind {
             TK::False => self.emit_byte(OpCode::False),
             TK::True => self.emit_byte(OpCode::True),
             TK::Nil => self.emit_byte(OpCode::Nil),
@@ -204,38 +205,22 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     }
 
     fn number(&mut self, _can_assign: bool) {
-        let value: f64 = self
-            .shared
-            .borrow()
-            .previous
-            .as_ref()
-            .unwrap()
-            .as_str()
-            .parse()
-            .unwrap();
+        let value: f64 = self.previous.as_ref().unwrap().as_str().parse().unwrap();
         self.emit_constant(value);
     }
 
     fn string(&mut self, _can_assign: bool) {
-        let value = {
-            let shared = self.shared.borrow();
-            let lexeme = shared.previous.as_ref().unwrap().as_str();
-            lexeme[1..lexeme.len() - 1].to_string()
-        };
-        let string_id = self.string_id(value);
+        let lexeme = self.previous.as_ref().unwrap().as_str();
+        let value = lexeme[1..lexeme.len() - 1].to_string();
+        let string_id = self.string_id(&value);
         self.emit_constant(string_id);
     }
 
     fn variable(&mut self, can_assign: bool) {
-        let name = self
-            .shared
-            .borrow()
-            .previous
-            .as_ref()
-            .unwrap()
-            .as_str()
-            .to_string();
-        self.named_variable(name, can_assign);
+        self.named_variable(
+            self.previous.as_ref().unwrap().as_str().to_string(),
+            can_assign,
+        );
     }
 
     fn and(&mut self, _can_assign: bool) {
