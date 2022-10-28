@@ -6,7 +6,7 @@ use crate::{
     value::Value,
 };
 
-impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
+impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     pub(super) fn advance(&mut self) {
         self.previous = std::mem::take(&mut self.current);
         loop {
@@ -74,48 +74,34 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
     fn function(&mut self, function_type: FunctionType) {
         let line = self.line();
 
-        let function = {
-            let mut compiler = Compiler::new_(
-                self.scanner.clone(),
-                self.arena,
-                self.previous.as_ref().unwrap().as_str(),
-                function_type,
-            );
-            compiler.current = self.current.clone();
-            compiler.previous = self.previous.clone();
-            compiler.strings_by_name = std::mem::take(&mut self.strings_by_name);
+        let function_name = self.previous.as_ref().unwrap().as_str().to_string();
+        let function = self
+            .nested(function_name, function_type, |compiler| {
+                compiler.begin_scope();
 
-            compiler.begin_scope();
-            compiler.consume(TK::LeftParen, "Expect '(' after function name.");
+                compiler.consume(TK::LeftParen, "Expect '(' after function name.");
 
-            if !compiler.check(TK::RightParen) {
-                loop {
-                    compiler.current_function.arity += 1;
-                    if compiler.current_function.arity > 255 {
-                        compiler.error_at_current("Can't have more than 255 parameters.");
-                    }
-                    let constant = compiler.parse_variable("Expect parameter name.", false);
-                    compiler.define_variable(constant, false);
-                    if !compiler.match_(TK::Comma) {
-                        break;
+                if !compiler.check(TK::RightParen) {
+                    loop {
+                        compiler.current_function_mut().arity += 1;
+                        if compiler.current_function().arity > 255 {
+                            compiler.error_at_current("Can't have more than 255 parameters.");
+                        }
+                        let constant = compiler.parse_variable("Expect parameter name.", false);
+                        compiler.define_variable(constant, false);
+                        if !compiler.match_(TK::Comma) {
+                            break;
+                        }
                     }
                 }
-            }
 
-            compiler.consume(TK::RightParen, "Expect ')' after parameters.");
-            compiler.consume(TK::LeftBrace, "Expect '{' before function body.");
-            compiler.block();
+                compiler.consume(TK::RightParen, "Expect ')' after parameters.");
+                compiler.consume(TK::LeftBrace, "Expect '{' before function body.");
+                compiler.block();
 
-            compiler.end();
-
-            self.scanner = compiler.scanner;
-            self.current = compiler.current;
-            self.previous = compiler.previous;
-            self.had_error |= compiler.had_error;
-            self.panic_mode |= compiler.panic_mode;
-            self.strings_by_name = std::mem::take(&mut compiler.strings_by_name);
-            compiler.current_function
-        };
+                compiler.end();
+            })
+            .current_function;
 
         let value_id = self.arena.add_value(Value::from(function));
         self.current_chunk().write_constant(value_id, line);
@@ -164,13 +150,8 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
 
         let old_loop_state = {
             let start = CodeOffset(self.current_chunk_len());
-            std::mem::replace(
-                &mut self.loop_state,
-                Some(LoopState {
-                    depth: self.scope_depth,
-                    start,
-                }),
-            )
+            let depth = self.scope_depth();
+            std::mem::replace(self.loop_state_mut(), Some(LoopState { depth, start }))
         };
 
         let mut exit_jump = None;
@@ -188,20 +169,22 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
             self.emit_byte(OpCode::Pop);
             self.consume(TK::RightParen, "Expect ')' after for clauses.");
 
-            self.emit_loop(self.loop_state.as_ref().unwrap().start);
-            self.loop_state.as_mut().unwrap().start = increment_start;
+            let loop_start = self.loop_state().as_ref().unwrap().start;
+            self.emit_loop(loop_start);
+            self.loop_state_mut().as_mut().unwrap().start = increment_start;
             self.patch_jump(body_jump);
         }
 
         self.statement();
-        self.emit_loop(self.loop_state.as_ref().unwrap().start);
+        let loop_start = self.loop_state().as_ref().unwrap().start;
+        self.emit_loop(loop_start);
 
         if let Some(exit_jump) = exit_jump {
             self.patch_jump(exit_jump);
             self.emit_byte(OpCode::Pop);
         }
 
-        self.loop_state = old_loop_state;
+        *self.loop_state_mut() = old_loop_state;
         self.end_scope();
     }
 
@@ -227,13 +210,8 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
     fn while_statement(&mut self) {
         let old_loop_state = {
             let start = CodeOffset(self.current_chunk_len());
-            std::mem::replace(
-                &mut self.loop_state,
-                Some(LoopState {
-                    depth: self.scope_depth,
-                    start,
-                }),
-            )
+            let depth = self.scope_depth();
+            std::mem::replace(self.loop_state_mut(), Some(LoopState { depth, start }))
         };
         self.consume(TK::LeftParen, "Expect '(' after 'while'.");
         self.expression();
@@ -242,11 +220,12 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
         let exit_jump = self.emit_jump(OpCode::JumpIfFalse);
         self.emit_byte(OpCode::Pop);
         self.statement();
-        self.emit_loop(self.loop_state.as_ref().unwrap().start);
+        let loop_start = self.loop_state().as_ref().unwrap().start;
+        self.emit_loop(loop_start);
 
         self.patch_jump(exit_jump);
         self.emit_byte(OpCode::Pop);
-        self.loop_state = old_loop_state;
+        *self.loop_state_mut() = old_loop_state;
     }
 
     fn switch_statement(&mut self) {
@@ -299,13 +278,13 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
     }
 
     fn continue_statement(&mut self) {
-        match self.loop_state {
+        match *self.loop_state() {
             None => self.error("'continue' outside a loop."),
             Some(state) => {
                 self.consume(TK::Semicolon, "Expect ';' after 'continue'.");
 
                 let locals_to_drop = self
-                    .locals
+                    .locals()
                     .iter()
                     .rev()
                     .take_while(|local| local.depth > state.depth)
@@ -366,7 +345,7 @@ impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
     }
 
     fn return_statement(&mut self) {
-        if self.function_type == FunctionType::Script {
+        if self.function_type() == FunctionType::Script {
             self.error("Can't return from top-level code.");
         }
         if self.match_(TK::Semicolon) {

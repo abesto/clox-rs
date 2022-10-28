@@ -5,7 +5,7 @@ use crate::{
 
 use super::Compiler;
 
-impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
+impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     pub(super) fn emit_byte<T>(&mut self, byte: T)
     where
         T: Into<u8>,

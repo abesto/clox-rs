@@ -17,7 +17,7 @@ use crate::{
     value::Function,
 };
 
-#[derive(Shrinkwrap, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Shrinkwrap, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Default)]
 #[shrinkwrap(mutable)]
 struct ScopeDepth(i32);
 
@@ -39,8 +39,43 @@ struct LoopState {
     start: CodeOffset,
 }
 
+struct NestableState<'scanner> {
+    current_function: Function,
+    function_type: FunctionType,
+
+    globals_by_name: HashMap<StringId, ConstantLongIndex>,
+    locals: Vec<Local<'scanner>>,
+    scope_depth: ScopeDepth,
+    loop_state: Option<LoopState>,
+}
+
+impl<'scanner> NestableState<'scanner> {
+    fn new(function_name: StringId, function_type: FunctionType) -> Self {
+        NestableState {
+            current_function: Function::new(0, function_name),
+            function_type,
+            globals_by_name: Default::default(),
+            locals: vec![Local {
+                name: Token {
+                    kind: TokenKind::Identifier,
+                    lexeme: &[],
+                    line: Line(0),
+                },
+                depth: ScopeDepth(0),
+                mutable: false,
+            }],
+            scope_depth: Default::default(),
+            loop_state: Default::default(),
+        }
+    }
+}
+
 pub struct Compiler<'scanner, 'arena> {
     arena: &'arena mut Arena,
+    strings_by_name: HashMap<String, StringId>,
+
+    rules: Rules<'scanner, 'arena>,
+
     scanner: Scanner<'scanner>,
     previous: Option<Token<'scanner>>,
     current: Option<Token<'scanner>>,
@@ -48,39 +83,15 @@ pub struct Compiler<'scanner, 'arena> {
     had_error: bool,
     panic_mode: bool,
 
-    current_function: Function,
-    function_type: FunctionType,
-
-    strings_by_name: HashMap<String, StringId>,
-    globals_by_name: HashMap<StringId, ConstantLongIndex>,
-    rules: Rules<'scanner, 'arena>,
-    locals: Vec<Local<'scanner>>,
-    scope_depth: ScopeDepth,
-    loop_state: Option<LoopState>,
+    nestable_state: Vec<NestableState<'scanner>>,
 }
 
 impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     #[must_use]
     pub fn new(scanner: Scanner<'scanner>, arena: &'arena mut Arena) -> Self {
-        Self::new_(scanner, arena, "<script>", FunctionType::Script)
-    }
-
-    #[must_use]
-    fn new_<S>(
-        scanner: Scanner<'scanner>,
-        arena: &'arena mut Arena,
-        function_name: S,
-        function_type: FunctionType,
-    ) -> Self
-    where
-        S: ToString,
-    {
-        let function_name = arena.add_string(function_name.to_string());
-        let mut compiler = Compiler {
+        let function_name = arena.add_string(String::from("<script>"));
+        Compiler {
             arena,
-            current_function: Function::new(0, function_name),
-            function_type,
-            globals_by_name: HashMap::new(),
             strings_by_name: HashMap::new(),
             scanner,
             previous: None,
@@ -88,22 +99,46 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
             had_error: false,
             panic_mode: false,
             rules: make_rules(),
-            locals: Vec::new(),
-            scope_depth: ScopeDepth(0),
-            loop_state: None,
-        };
+            nestable_state: vec![NestableState::new(function_name, FunctionType::Script)],
+        }
+    }
 
-        compiler.locals.push(Local {
-            name: Token {
-                kind: TokenKind::Identifier,
-                lexeme: &[],
-                line: Line(0),
-            },
-            depth: ScopeDepth(0),
-            mutable: false,
-        });
+    fn start_nesting<S>(&mut self, function_name: S, function_type: FunctionType)
+    where
+        S: ToString,
+    {
+        let function_name = self.string_id(function_name);
+        self.nestable_state
+            .push(NestableState::new(function_name, function_type));
+    }
 
-        compiler
+    fn end_nesting(&mut self) -> NestableState {
+        self.nestable_state.pop().unwrap()
+    }
+
+    fn nested<F, S>(&mut self, function_name: S, function_type: FunctionType, f: F) -> NestableState
+    where
+        S: ToString,
+        F: Fn(&mut Self),
+    {
+        self.start_nesting(function_name, function_type);
+        f(self);
+        self.end_nesting()
+    }
+
+    fn has_enclosing(&self) -> bool {
+        self.nestable_state.len() > 1
+    }
+
+    fn in_enclosing<F, R>(&mut self, f: F) -> R
+    where
+        F: Fn(&mut Self) -> R,
+    {
+        assert!(self.has_enclosing());
+        let state = self.nestable_state.pop().unwrap();
+        let result = f(self);
+        self.nestable_state.push(state);
+        result
     }
 
     pub fn compile(mut self) -> Option<Function> {
@@ -117,7 +152,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         if self.had_error {
             None
         } else {
-            Some(self.current_function)
+            Some(self.nestable_state.pop().unwrap().current_function)
         }
     }
 
@@ -129,8 +164,52 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         }
     }
 
+    fn current_function(&self) -> &Function {
+        &self.nestable_state.last().unwrap().current_function
+    }
+
+    fn current_function_mut(&mut self) -> &mut Function {
+        &mut self.nestable_state.last_mut().unwrap().current_function
+    }
+
+    fn loop_state(&mut self) -> &Option<LoopState> {
+        &self.nestable_state.last().unwrap().loop_state
+    }
+
+    fn loop_state_mut(&mut self) -> &mut Option<LoopState> {
+        &mut self.nestable_state.last_mut().unwrap().loop_state
+    }
+
+    fn locals(&self) -> &Vec<Local> {
+        &self.nestable_state.last().unwrap().locals
+    }
+
+    fn locals_mut(&mut self) -> &mut Vec<Local<'scanner>> {
+        &mut self.nestable_state.last_mut().unwrap().locals
+    }
+
+    fn function_type(&self) -> FunctionType {
+        self.nestable_state.last().unwrap().function_type
+    }
+
+    fn scope_depth(&self) -> ScopeDepth {
+        self.nestable_state.last().unwrap().scope_depth
+    }
+
+    fn scope_depth_mut(&mut self) -> &mut ScopeDepth {
+        &mut self.nestable_state.last_mut().unwrap().scope_depth
+    }
+
+    fn globals_by_name(&self) -> &HashMap<StringId, ConstantLongIndex> {
+        &self.nestable_state.last().unwrap().globals_by_name
+    }
+
+    fn globals_by_name_mut(&mut self) -> &mut HashMap<StringId, ConstantLongIndex> {
+        &mut self.nestable_state.last_mut().unwrap().globals_by_name
+    }
+
     pub(super) fn current_chunk(&mut self) -> &mut Chunk {
-        &mut self.current_function.chunk
+        &mut self.current_function_mut().chunk
     }
 
     pub(super) fn current_chunk_len(&mut self) -> usize {

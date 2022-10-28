@@ -11,19 +11,29 @@ use crate::scanner::{Token, TokenKind as TK};
 
 impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     pub(super) fn begin_scope(&mut self) {
-        *self.scope_depth += 1;
+        **self.scope_depth_mut() += 1;
     }
 
     pub(super) fn end_scope(&mut self) {
-        *self.scope_depth -= 1;
-        while self
-            .locals
-            .last()
-            .map(|local| local.depth > self.scope_depth)
-            .unwrap_or(false)
+        **self.scope_depth_mut() -= 1;
+        let scope_depth = self.scope_depth();
+
+        let mut dropped = 0;
+
         {
+            let locals = self.locals_mut();
+            while locals
+                .last()
+                .map(|local| local.depth > scope_depth)
+                .unwrap_or(false)
+            {
+                dropped += 1;
+                locals.pop();
+            }
+        }
+
+        for _ in 0..dropped {
             self.emit_byte(OpCode::Pop);
-            self.locals.pop();
         }
     }
 
@@ -86,12 +96,12 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     {
         let string_id = self.string_id(name);
 
-        if let Some(index) = self.globals_by_name.get(&string_id) {
+        if let Some(index) = self.globals_by_name().get(&string_id) {
             *index
         } else {
             let value_id = self.arena.add_value(string_id.into());
             let index = self.current_chunk().make_constant(value_id);
-            self.globals_by_name.insert(string_id, index);
+            self.globals_by_name_mut().insert(string_id, index);
             index
         }
     }
@@ -103,19 +113,19 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         let name_string = name.to_string();
         let name = name_string.as_bytes();
         let retval = self
-            .locals
+            .locals()
             .iter()
             .enumerate()
             .rev()
             .find(|(_, local)| local.name.lexeme == name)
             .map(|(index, local)| {
                 if *local.depth == -1 {
-                    self.locals.len()
+                    self.locals().len()
                 } else {
                     index
                 }
             });
-        if retval == Some(self.locals.len()) {
+        if retval == Some(self.locals().len()) {
             self.error("Can't read local variable in its own initializer.");
         }
         retval
@@ -123,11 +133,11 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
 
     fn add_local(&mut self, name: Token<'scanner>, mutable: bool) {
         let limit_exp = if config::STD_MODE.load() { 8 } else { 24 };
-        if self.locals.len() > usize::pow(2, limit_exp) - 1 {
+        if self.locals().len() > usize::pow(2, limit_exp) - 1 {
             self.error("Too many local variables in function.");
             return;
         }
-        self.locals.push(Local {
+        self.locals_mut().push(Local {
             name,
             depth: ScopeDepth(-1),
             mutable,
@@ -135,13 +145,14 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     }
 
     pub(super) fn declare_variable(&mut self, mutable: bool) {
-        if *self.scope_depth == 0 {
+        if *self.scope_depth() == 0 {
             return;
         }
 
         let name = self.previous.clone().unwrap();
-        if self.locals.iter().rev().any(|local| {
-            if *local.depth != -1 && local.depth < self.scope_depth {
+        let scope_depth = self.scope_depth();
+        if self.locals_mut().iter().rev().any(|local| {
+            if *local.depth != -1 && local.depth < scope_depth {
                 false
             } else {
                 local.name.lexeme == name.lexeme
@@ -157,7 +168,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         self.consume(TK::Identifier, msg);
 
         self.declare_variable(mutable);
-        if *self.scope_depth > 0 {
+        if *self.scope_depth() > 0 {
             None
         } else {
             Some(self.identifier_constant(self.previous.as_ref().unwrap().as_str().to_string()))
@@ -165,17 +176,18 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     }
 
     pub(super) fn mark_initialized(&mut self) {
-        if *self.scope_depth == 0 {
+        let scope_depth = self.scope_depth();
+        if *scope_depth == 0 {
             return;
         }
-        if let Some(local) = self.locals.last_mut() {
-            local.depth = self.scope_depth;
+        if let Some(local) = self.locals_mut().last_mut() {
+            local.depth = scope_depth;
         }
     }
 
     pub(super) fn define_variable(&mut self, global: Option<ConstantLongIndex>, mutable: bool) {
         if global.is_none() {
-            assert!(*self.scope_depth > 0);
+            assert!(*self.scope_depth() > 0);
             self.mark_initialized();
             return;
         }
@@ -221,7 +233,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     }
 
     fn check_local_const(&mut self, local_index: usize) {
-        let local = &self.locals[local_index];
+        let local = &self.locals()[local_index];
         if *local.depth != -1 && !local.mutable {
             self.error("Reassignment to local 'const'.");
         }
