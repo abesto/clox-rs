@@ -55,8 +55,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
 
     /// `jump_offset`: the code offset of the last byte of the jump instruction
     pub(super) fn patch_jump(&mut self, jump_offset: CodeOffset) {
-        let jump_length =
-            self.current_chunk().code().len() - *jump_offset - OpCode::Jump.instruction_len();
+        let jump_length = self.current_chunk().code().len() - *jump_offset - 3; // 3: length of the jump instruction + its arg
 
         if jump_length > usize::from(u16::MAX) {
             self.error("Too much code to jump over.");
@@ -69,8 +68,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     }
 
     pub(super) fn emit_loop(&mut self, loop_start: CodeOffset) {
-        let offset =
-            self.current_chunk().code().len() - *loop_start + OpCode::Loop.instruction_len();
+        let offset = self.current_chunk().code().len() - *loop_start + 3; // 3: length of the loop instruction + its arg
 
         self.emit_byte(OpCode::Loop);
         if offset > usize::from(u16::MAX) {

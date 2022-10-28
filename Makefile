@@ -1,7 +1,7 @@
 CRAFTING_INTERPRETERS ?= ../craftinginterpreters
 DEBUG_BIN := target/debug/clox-rs
 
-test_level := chap24_calls
+test_level := chap25_closures
 sources := src/*.rs src/compiler/*.rs Cargo.toml
 
 $(DEBUG_BIN): $(sources)

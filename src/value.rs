@@ -1,8 +1,10 @@
-use std::rc::Rc;
-
 use derivative::Derivative;
 
-use crate::{arena::StringId, chunk::Chunk, config};
+use crate::{
+    arena::{FunctionId, StringId, ValueId},
+    chunk::Chunk,
+    config,
+};
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum Value {
@@ -11,8 +13,41 @@ pub enum Value {
     Number(f64),
 
     String(StringId),
-    Function(Rc<Function>),
+
+    Function(FunctionId),
+    Closure(Closure),
     NativeFunction(NativeFunction),
+
+    Upvalue(usize),
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
+pub struct Closure {
+    pub function: FunctionId,
+    pub upvalues: Vec<ValueId>,
+    pub upvalue_count: u8,
+}
+
+impl Closure {
+    pub fn new(function: FunctionId) -> Closure {
+        let upvalue_count = function.upvalue_count;
+        Closure {
+            function,
+            upvalues: Vec::with_capacity(usize::from(upvalue_count)),
+            upvalue_count,
+        }
+    }
+}
+
+impl Value {
+    pub fn closure(function: FunctionId) -> Value {
+        let upvalue_count = function.upvalue_count;
+        Value::Closure(Closure {
+            function,
+            upvalues: Vec::with_capacity(usize::from(upvalue_count)),
+            upvalue_count,
+        })
+    }
 }
 
 impl From<bool> for Value {
@@ -33,9 +68,15 @@ impl From<StringId> for Value {
     }
 }
 
-impl From<Function> for Value {
-    fn from(f: Function) -> Self {
-        Value::Function(Rc::new(f))
+impl From<FunctionId> for Value {
+    fn from(f: FunctionId) -> Self {
+        Value::Function(f)
+    }
+}
+
+impl From<Closure> for Value {
+    fn from(c: Closure) -> Self {
+        Value::Closure(c)
     }
 }
 
@@ -46,7 +87,19 @@ impl std::fmt::Display for Value {
             Value::Number(num) => f.pad(&format!("{}", num)),
             Value::Nil => f.pad("nil"),
             Value::String(s) => f.pad(s),
-            Value::Function(fun) => f.pad(&format!("<fn {}>", *fun.name)),
+            Value::Function(function_id) => f.pad(&format!("<fn {}>", *function_id.name)),
+            Value::Closure(closure) => {
+                if config::STD_MODE.load() {
+                    f.pad(&format!("<fn {}>", *closure.function.name))
+                } else {
+                    f.pad(&format!(
+                        "<fn {}:{}:{}>",
+                        *closure.function.name,
+                        closure.upvalue_count,
+                        closure.upvalues.len()
+                    ))
+                }
+            }
             Value::NativeFunction(fun) => {
                 if config::STD_MODE.load() {
                     f.pad("<native fn>")
@@ -54,6 +107,7 @@ impl std::fmt::Display for Value {
                     f.pad(&format!("<native fn {}>", fun.name))
                 }
             }
+            Value::Upvalue(_) => f.pad("upvalue"),
         }
     }
 }
@@ -62,6 +116,27 @@ impl Value {
     pub fn is_falsey(&self) -> bool {
         matches!(self, Self::Bool(false) | Self::Nil)
     }
+
+    pub fn as_closure(&self) -> &Closure {
+        match self {
+            Value::Closure(c) => c,
+            _ => unreachable!("Expected Closure, found `{}`", self),
+        }
+    }
+
+    pub fn as_function(&self) -> &FunctionId {
+        match self {
+            Value::Function(f) => f,
+            _ => unreachable!("Expected Function, found `{}`", self),
+        }
+    }
+
+    pub fn as_upvalue(&self) -> usize {
+        match self {
+            Value::Upvalue(v) => *v,
+            _ => unreachable!("Expected upvalue, found `{}`", self),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
@@ -69,6 +144,7 @@ pub struct Function {
     pub arity: usize,
     pub chunk: Chunk,
     pub name: StringId,
+    pub upvalue_count: u8,
 }
 
 impl Function {
@@ -78,6 +154,7 @@ impl Function {
             arity,
             name,
             chunk: Chunk::new(name),
+            upvalue_count: 0,
         }
     }
 }

@@ -6,7 +6,7 @@ use crate::{
     config,
 };
 
-use super::{Compiler, Local, ScopeDepth};
+use super::{Compiler, Local, ScopeDepth, Upvalue};
 use crate::scanner::{Token, TokenKind as TK};
 
 impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
@@ -45,12 +45,22 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         let mut set_op = OpCode::SetLocal;
         let mut arg = self.resolve_local(name.to_string());
 
-        // Local or global?
+        // Upvalue?
+        if arg.is_none() {
+            if let Some(upvalue_arg) = self.resolve_upvalue(name.to_string()) {
+                get_op = OpCode::GetUpvalue;
+                set_op = OpCode::SetUpvalue;
+                arg = Some(usize::from(upvalue_arg));
+            }
+        }
+
+        // If neither local nor upvalue, then it must be a global
         if arg.is_none() {
             arg = Some(*self.identifier_constant(name));
             get_op = OpCode::GetGlobal;
             set_op = OpCode::SetGlobal;
         }
+
         let arg = arg.unwrap();
 
         // Support for more than u8::MAX variables in a scope
@@ -129,6 +139,59 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
             self.error("Can't read local variable in its own initializer.");
         }
         retval
+    }
+
+    fn resolve_upvalue<S>(&mut self, name: S) -> Option<u8>
+    where
+        S: ToString,
+    {
+        if !self.has_enclosing() {
+            return None;
+        }
+
+        if let Some(local) = self.in_enclosing(|compiler| compiler.resolve_local(name.to_string()))
+        {
+            return Some(self.add_upvalue(local, true));
+        }
+
+        if let Some(upvalue) =
+            self.in_enclosing(|compiler| compiler.resolve_upvalue(name.to_string()))
+        {
+            return Some(self.add_upvalue(usize::from(upvalue), false));
+        }
+
+        None
+    }
+
+    fn add_upvalue(&mut self, local_index: usize, is_local: bool) -> u8 {
+        if let Ok(local_index) = u8::try_from(local_index) {
+            // Return index if we already have it
+            if let Some((upvalue_index, _)) =
+                self.upvalues().iter().enumerate().find(|(_, upvalue)| {
+                    upvalue.index == local_index && upvalue.is_local == is_local
+                })
+            {
+                return u8::try_from(upvalue_index).unwrap();
+            }
+
+            // Record new upvalue
+            self.upvalues_mut().push(Upvalue {
+                index: local_index,
+                is_local,
+            });
+            let upvalue_count = self.upvalues().len();
+            if let Ok(upvalue_count) = u8::try_from(upvalue_count) {
+                self.current_function_mut().upvalue_count = upvalue_count;
+                upvalue_count - 1
+            } else {
+                self.error("Too many closure variables in function.");
+                0
+            }
+        } else {
+            // This is where `(Get|Set)UpvalueLong` would go
+            self.error("Too variables in function surrounding closure.");
+            0
+        }
     }
 
     fn add_local(&mut self, name: Token<'scanner>, mutable: bool) {

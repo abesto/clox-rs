@@ -39,12 +39,20 @@ struct LoopState {
     start: CodeOffset,
 }
 
+#[derive(Clone, Debug)]
+struct Upvalue {
+    index: u8,
+    is_local: bool,
+}
+
 struct NestableState<'scanner> {
     current_function: Function,
     function_type: FunctionType,
 
-    globals_by_name: HashMap<StringId, ConstantLongIndex>,
     locals: Vec<Local<'scanner>>,
+    globals_by_name: HashMap<StringId, ConstantLongIndex>,
+    upvalues: Vec<Upvalue>,
+
     scope_depth: ScopeDepth,
     loop_state: Option<LoopState>,
 }
@@ -54,7 +62,6 @@ impl<'scanner> NestableState<'scanner> {
         NestableState {
             current_function: Function::new(0, function_name),
             function_type,
-            globals_by_name: Default::default(),
             locals: vec![Local {
                 name: Token {
                     kind: TokenKind::Identifier,
@@ -64,6 +71,8 @@ impl<'scanner> NestableState<'scanner> {
                 depth: ScopeDepth(0),
                 mutable: false,
             }],
+            upvalues: Default::default(),
+            globals_by_name: Default::default(),
             scope_depth: Default::default(),
             loop_state: Default::default(),
         }
@@ -206,6 +215,14 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
 
     fn globals_by_name_mut(&mut self) -> &mut HashMap<StringId, ConstantLongIndex> {
         &mut self.nestable_state.last_mut().unwrap().globals_by_name
+    }
+
+    fn upvalues(&self) -> &Vec<Upvalue> {
+        &self.nestable_state.last().unwrap().upvalues
+    }
+
+    fn upvalues_mut(&mut self) -> &mut Vec<Upvalue> {
+        &mut self.nestable_state.last_mut().unwrap().upvalues
     }
 
     pub(super) fn current_chunk(&mut self) -> &mut Chunk {

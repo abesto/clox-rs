@@ -1,18 +1,18 @@
 use std::pin::Pin;
-use std::rc::Rc;
 
 use hashbrown::HashMap;
 
 use crate::arena::ValueId;
 use crate::chunk::InstructionDisassembler;
 use crate::native_functions::NativeFunctions;
+use crate::value::Closure;
 use crate::{
     arena::{Arena, StringId},
     chunk::{CodeOffset, OpCode},
     compiler::Compiler,
     config,
     scanner::Scanner,
-    value::{Function, NativeFunction, NativeFunctionImpl, Value},
+    value::{NativeFunction, NativeFunctionImpl, Value},
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -27,8 +27,8 @@ macro_rules! runtime_error {
     ($self:ident, $($arg:expr),* $(,)?) => {
         eprintln!($($arg),*);
         for frame in $self.frames.iter().rev() {
-            let line = frame.function.chunk.get_line(&CodeOffset(frame.ip - 1));
-            eprintln!("[line {}] in {}", *line, *frame.function.name);
+            let line = frame.closure().function.chunk.get_line(&CodeOffset(frame.ip - 1));
+            eprintln!("[line {}] in {}", *line, *frame.closure().function.name);
         }
     };
 }
@@ -49,9 +49,15 @@ struct Global {
 }
 
 pub struct CallFrame {
-    function: Rc<Function>,
+    closure: ValueId,
     ip: usize,
     stack_base: usize,
+}
+
+impl CallFrame {
+    pub fn closure(&self) -> &Closure {
+        (*self.closure).as_closure()
+    }
 }
 
 struct BuiltinConstants {
@@ -110,9 +116,12 @@ impl VM {
 
         let result = if let Some(function) = compiler.compile() {
             native_functions.define_functions(self);
-            let function = Rc::new(function);
-            self.stack_push_value(Value::Function(Rc::clone(&function)));
-            self.execute_call(function, 0);
+
+            let function_id = self.arena.add_function(function);
+            let closure = Value::closure(function_id);
+            let value_id = self.arena.add_value(closure);
+            self.stack_push(value_id);
+            self.execute_call(value_id, 0);
             self.run()
         } else {
             InterpretResult::CompileError
@@ -128,7 +137,7 @@ impl VM {
         let trace_execution = config::TRACE_EXECUTION.load();
         loop {
             if trace_execution {
-                let function = &self.frame().function;
+                let function = &self.frame().closure().function;
                 let mut disassembler = InstructionDisassembler::new(&function.chunk);
                 *disassembler.offset = self.frame().ip;
                 println!(
@@ -184,7 +193,7 @@ impl VM {
                 }
                 OpCode::Loop => {
                     let offset =
-                        self.read_16bit_number("Internal error: missing operand for OP_+loop");
+                        self.read_16bit_number("Internal error: missing operand for OP_LOOP");
                     self.frame_mut().ip -= offset;
                 }
                 OpCode::Call => {
@@ -206,8 +215,40 @@ impl VM {
                     self.stack_push(value);
                 }
                 OpCode::Closure => {
-                    let value = *self.read_constant(true);
-                    self.stack_push(value);
+                    let value = *self.read_constant(false);
+                    let function = value.as_function();
+                    let mut closure = Closure::new(*function);
+
+                    for _ in 0..usize::from(closure.upvalue_count) {
+                        let is_local = self.read_byte("Missing 'is_local' operand for OP_CLOSURE");
+                        debug_assert!(
+                            is_local == 0 || is_local == 1,
+                            "'is_local` must be 0 or 1, got {}",
+                            is_local
+                        );
+                        let is_local = is_local == 1;
+
+                        let index =
+                            usize::from(self.read_byte("Missing 'index' operand for OP_CLOSURE"));
+                        if is_local {
+                            closure.upvalues.push(self.capture_upvalue(index));
+                        } else {
+                            closure
+                                .upvalues
+                                .push((*self.frame().closure).as_closure().upvalues[index]);
+                        }
+                    }
+                    /*/
+                    eprintln!(
+                        "{} {} {:?}",
+                        *closure.function.name,
+                        closure.upvalue_count,
+                        closure.upvalues[0].as_upvalue()
+                    );
+                    */
+
+                    let closure_id = self.arena.add_value(Value::from(closure));
+                    self.stack_push(closure_id);
                 }
                 OpCode::Nil => self.stack_push(self.builtin_constants.nil),
                 OpCode::True => self.stack_push(self.builtin_constants.true_),
@@ -238,6 +279,45 @@ impl VM {
 
                 OpCode::Greater => binary_op!(self, >),
                 OpCode::Less => binary_op!(self, <),
+
+                OpCode::GetUpvalue => {
+                    /*
+                    let closure = self.frame().closure.as_closure();
+                    eprintln!(
+                        "{} {} {:?}",
+                        *closure.function.name,
+                        closure.upvalue_count,
+                        closure.upvalues.len()
+                    );
+                    */
+                    let upvalue_index =
+                        usize::from(self.read_byte("Missing argument for OP_GET_UPVALUE"));
+                    let absolute_local_index =
+                        self.frame().closure.as_closure().upvalues[upvalue_index].as_upvalue();
+                    self.stack_push(self.stack[absolute_local_index]);
+                }
+                OpCode::SetUpvalue => {
+                    /*
+                    let closure = self.frame().closure.as_closure();
+                    eprintln!(
+                        "{} {} {:?} = {:?}",
+                        *closure.function.name,
+                        closure.upvalue_count,
+                        closure.upvalues.len(),
+                        self.stack.last()
+                    );
+                    */
+                    let upvalue_index =
+                        usize::from(self.read_byte("Missing argument for OP_SET_UPVALUE"));
+                    let absolute_local_index =
+                        self.frame().closure.as_closure().upvalues[upvalue_index].as_upvalue();
+                    // eprintln!("overwriting {}", *self.stack[absolute_local_index]);
+                    *self.stack[absolute_local_index] = self
+                        .stack
+                        .last()
+                        .map(|x| (**x).clone())
+                        .expect("Stack underflow in OP_SET_UPVALUE");
+                }
             };
         }
     }
@@ -444,7 +524,7 @@ impl VM {
         let frame = self.frame_mut();
         frame.ip += 1;
         let index = frame.ip - 1;
-        *frame.function.chunk.code().get(index).expect(msg)
+        *frame.closure().function.chunk.code().get(index).expect(msg)
     }
 
     fn read_24bit_number(&mut self, msg: &str) -> usize {
@@ -466,7 +546,7 @@ impl VM {
     }
 
     fn read_constant_value(&self, index: usize) -> &ValueId {
-        self.frame().function.chunk.get_constant(index)
+        self.frame().closure().function.chunk.get_constant(index)
     }
 
     fn read_constant(&mut self, long: bool) -> &ValueId {
@@ -542,7 +622,7 @@ impl VM {
 
     fn call_value(&mut self, callee: ValueId, arg_count: u8) -> bool {
         match &*callee {
-            Value::Function(f) => self.execute_call(Rc::clone(f), arg_count),
+            Value::Closure(_) => self.execute_call(callee, arg_count),
             Value::NativeFunction(NativeFunction { fun, arity, name }) => {
                 if arg_count != *arity {
                     runtime_error!(
@@ -580,8 +660,13 @@ impl VM {
         }
     }
 
-    fn execute_call(&mut self, f: Rc<Function>, arg_count: u8) -> bool {
-        let arity = f.arity;
+    fn capture_upvalue(&mut self, index: usize) -> ValueId {
+        let upvalue = Value::Upvalue(self.frame().stack_base + index);
+        self.arena.add_value(upvalue)
+    }
+
+    fn execute_call(&mut self, closure: ValueId, arg_count: u8) -> bool {
+        let arity = closure.as_closure().function.arity;
         let arg_count = usize::from(arg_count);
         if arg_count != arity {
             runtime_error!(self, "Expected {} arguments but got {}.", arity, arg_count);
@@ -593,8 +678,14 @@ impl VM {
             return false;
         }
 
+        debug_assert!(
+            matches!(*closure, Value::Closure(_)),
+            "`execute_call` must be called with a `Closure`, got: {}",
+            *closure
+        );
+
         self.frames.push(CallFrame {
-            function: f,
+            closure,
             ip: 0,
             stack_base: self.stack.len() - arg_count - 1,
         });

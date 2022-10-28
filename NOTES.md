@@ -22,13 +22,10 @@ Things that were hard, and particularly things where I deviate from `clox` prope
   * Initially I used the Rust call stack to handle the compiler stack, and explicitly copied the "shared" state into / out of the sub-compiler. This breaks down at closures, where the nested compiler needs to access some of the state of the enclosing compiler.
   * Then I tried representing the shared state in an `Rc<RefCell<SharedCompilerState>>`, and nesting compiler instances that carry their own "private" state. This still doesn't actually provide a solution to "how do nested compilers access their enclosing compiler".
   * Finally: I completely dropped the idea of a stack of compiler instances. I have just the one compiler, with a stack of nestable *states* managed explicitly.
-* Most `Obj*` things in the book map to a `Value` variant. `Closure` is an exception: `ObjFunction` maps to `Function`, and `ObjClosure` maps to `Value::Function`.
-* Storing a pointer to a variable in an `Upvalue` is problematic in the naive implementation of `Value` where all `Value` instances live on the (Rust) stack and are owned by the `VM::stack` or `VM::globals`. To get around this, I skipped over `Upvalue`s to do a memory management refactor first. 
 
 # TODO
 
 * Drop the VM stack after we're done interpreting a piece of code. In the REPL, stuff can stay there after runtime errors.
-* Manage memory for `Function`s through `Arena` instead of `Rc` (possibly: DRY the implementation of `Arena`)
 * Possible optimization: copy-on-write for `Value`s stored in the `Arena`
 
 # Challenges

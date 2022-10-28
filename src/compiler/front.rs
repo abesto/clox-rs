@@ -3,7 +3,6 @@ use crate::{
     chunk::{CodeOffset, OpCode},
     scanner::TokenKind as TK,
     types::Line,
-    value::Value,
 };
 
 impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
@@ -72,39 +71,44 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     }
 
     fn function(&mut self, function_type: FunctionType) {
-        let line = self.line();
-
         let function_name = self.previous.as_ref().unwrap().as_str().to_string();
-        let function = self
-            .nested(function_name, function_type, |compiler| {
-                compiler.begin_scope();
 
-                compiler.consume(TK::LeftParen, "Expect '(' after function name.");
+        let nested_state = self.nested(function_name, function_type, |compiler| {
+            compiler.begin_scope();
 
-                if !compiler.check(TK::RightParen) {
-                    loop {
-                        compiler.current_function_mut().arity += 1;
-                        if compiler.current_function().arity > 255 {
-                            compiler.error_at_current("Can't have more than 255 parameters.");
-                        }
-                        let constant = compiler.parse_variable("Expect parameter name.", false);
-                        compiler.define_variable(constant, false);
-                        if !compiler.match_(TK::Comma) {
-                            break;
-                        }
+            compiler.consume(TK::LeftParen, "Expect '(' after function name.");
+
+            if !compiler.check(TK::RightParen) {
+                loop {
+                    compiler.current_function_mut().arity += 1;
+                    if compiler.current_function().arity > 255 {
+                        compiler.error_at_current("Can't have more than 255 parameters.");
+                    }
+                    let constant = compiler.parse_variable("Expect parameter name.", false);
+                    compiler.define_variable(constant, false);
+                    if !compiler.match_(TK::Comma) {
+                        break;
                     }
                 }
+            }
 
-                compiler.consume(TK::RightParen, "Expect ')' after parameters.");
-                compiler.consume(TK::LeftBrace, "Expect '{' before function body.");
-                compiler.block();
+            compiler.consume(TK::RightParen, "Expect ')' after parameters.");
+            compiler.consume(TK::LeftBrace, "Expect '{' before function body.");
+            compiler.block();
+            compiler.end();
+        });
+        let nested_function = nested_state.current_function;
+        let nested_upvalues = nested_state.upvalues;
 
-                compiler.end();
-            })
-            .current_function;
+        self.emit_byte(OpCode::Closure);
+        let function_id = self.arena.add_function(nested_function);
+        let value_id = self.arena.add_value(function_id.into());
+        let value_id_byte = u8::try_from(self.current_chunk().make_constant(value_id).0).unwrap();
+        self.emit_byte(value_id_byte);
 
-        let value_id = self.arena.add_value(Value::from(function));
-        self.current_chunk().write_constant(value_id, line);
+        for upvalue in nested_upvalues {
+            self.emit_bytes(upvalue.is_local, upvalue.index);
+        }
     }
 
     fn fun_declaration(&mut self) {
