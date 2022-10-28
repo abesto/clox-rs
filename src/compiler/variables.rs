@@ -14,21 +14,14 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
 
     pub(super) fn end_scope(&mut self) {
         *self.scope_depth -= 1;
-        while {
-            let mut shared = self.shared.borrow_mut();
-            let locals = shared.locals_stack.last_mut().unwrap();
-            locals
-                .last()
-                .map(|local| local.depth > self.scope_depth)
-                .unwrap_or(false)
-        } {
+        while self
+            .locals
+            .last()
+            .map(|local| local.depth > self.scope_depth)
+            .unwrap_or(false)
+        {
             self.emit_byte(OpCode::Pop);
-            self.shared
-                .borrow_mut()
-                .locals_stack
-                .last_mut()
-                .unwrap()
-                .pop();
+            self.locals.pop();
         }
     }
 
@@ -113,55 +106,38 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     where
         S: ToString,
     {
-        let retval = {
-            let name_string = name.to_string();
-            let name = name_string.as_bytes();
-            let shared = self.shared.borrow();
-            let locals = shared.locals_stack.last().unwrap();
-            locals
-                .iter()
-                .enumerate()
-                .rev()
-                .find(|(_, local)| local.name.lexeme == name)
-                .map(|(index, local)| {
-                    if *local.depth == -1 {
-                        locals.len()
-                    } else {
-                        index
-                    }
-                })
-        };
-
-        if retval == Some(self.shared.borrow().locals_stack.last().unwrap().len()) {
+        let name_string = name.to_string();
+        let name = name_string.as_bytes();
+        let retval = self
+            .locals
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, local)| local.name.lexeme == name)
+            .map(|(index, local)| {
+                if *local.depth == -1 {
+                    self.locals.len()
+                } else {
+                    index
+                }
+            });
+        if retval == Some(self.locals.len()) {
             self.error("Can't read local variable in its own initializer.");
         }
-
         retval
     }
 
     fn add_local(&mut self, name: Token<'scanner>, mutable: bool) {
         let limit_exp = if config::STD_MODE.load() { 8 } else { 24 };
-
-        let locals_count = {
-            let shared = self.shared.borrow();
-            let locals = shared.locals_stack.last().unwrap();
-            locals.len()
-        };
-        if locals_count > usize::pow(2, limit_exp) - 1 {
+        if self.locals.len() > usize::pow(2, limit_exp) - 1 {
             self.error("Too many local variables in function.");
             return;
         }
-
-        self.shared
-            .borrow_mut()
-            .locals_stack
-            .last_mut()
-            .unwrap()
-            .push(Local {
-                name,
-                depth: ScopeDepth(-1),
-                mutable,
-            });
+        self.locals.push(Local {
+            name,
+            depth: ScopeDepth(-1),
+            mutable,
+        });
     }
 
     pub(super) fn declare_variable(&mut self, mutable: bool) {
@@ -170,22 +146,13 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         }
 
         let name = self.shared.borrow().previous.clone().unwrap();
-        if self
-            .shared
-            .borrow()
-            .locals_stack
-            .last()
-            .unwrap()
-            .iter()
-            .rev()
-            .any(|local| {
-                if *local.depth != -1 && local.depth < self.scope_depth {
-                    false
-                } else {
-                    local.name.lexeme == name.lexeme
-                }
-            })
-        {
+        if self.locals.iter().rev().any(|local| {
+            if *local.depth != -1 && local.depth < self.scope_depth {
+                false
+            } else {
+                local.name.lexeme == name.lexeme
+            }
+        }) {
             self.error("Already a variable with this name in this scope.");
         }
 
@@ -215,14 +182,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         if *self.scope_depth == 0 {
             return;
         }
-        if let Some(local) = self
-            .shared
-            .borrow_mut()
-            .locals_stack
-            .last_mut()
-            .unwrap()
-            .last_mut()
-        {
+        if let Some(local) = self.locals.last_mut() {
             local.depth = self.scope_depth;
         }
     }
@@ -275,13 +235,8 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     }
 
     fn check_local_const(&mut self, local_index: usize) {
-        let res = {
-            let shared = self.shared.borrow();
-            let locals = shared.locals_stack.last().unwrap();
-            let local = &locals[local_index];
-            *local.depth != -1 && !local.mutable
-        };
-        if res {
+        let local = &self.locals[local_index];
+        if *local.depth != -1 && !local.mutable {
             self.error("Reassignment to local 'const'.");
         }
     }
