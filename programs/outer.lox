@@ -1,0 +1,14 @@
+fun outer() {
+  var x = 1;
+  fun inner() {
+    print x;
+    x = x + 1;
+  }
+
+  return inner;
+}
+
+var closure = outer();
+closure();
+closure();
+closure();
