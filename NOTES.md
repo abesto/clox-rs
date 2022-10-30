@@ -22,6 +22,8 @@ Things that were hard, and particularly things where I deviate from `clox` prope
   * Initially I used the Rust call stack to handle the compiler stack, and explicitly copied the "shared" state into / out of the sub-compiler. This breaks down at closures, where the nested compiler needs to access some of the state of the enclosing compiler.
   * Then I tried representing the shared state in an `Rc<RefCell<SharedCompilerState>>`, and nesting compiler instances that carry their own "private" state. This still doesn't actually provide a solution to "how do nested compilers access their enclosing compiler".
   * Finally: I completely dropped the idea of a stack of compiler instances. I have just the one compiler, with a stack of nestable *states* managed explicitly.
+* The book stores the list of open `Upvalue`s in a poor man's linked list. Rust has a `LinkedList` in its stdlib, but it doesn't expose a way to insert an item in the middle in O(1) time given a pointer at an item. <https://github.com/rust-lang/rust/issues/58533> tracks adding a `Cursor` API that would enable this. The book also makes an argument that this is not *quite* performance critical. Instead of trying to implement a half-assed linked list in Rust (which is known to be hard), I'll just throw a `VecDeque` at this. We'll store `ValueId`s, so we get pointer-like semantics in that we'll point at the same single instance of the value (i.e. variable vs value).
+* The book stores closed `Upvalue`s with some neat pointer trickery. We can't follow there; instead, `Upvalue` is now an enum with an `Open(usize)` and a `Closed(ValueId)` variant.
 
 # TODO
 
@@ -43,8 +45,6 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * 24/3: native functions can report runtime errors
 * TODO ternary operator
 * STRETCH: add error handling to user code
-* TODO add a `Value` variant that holds a reference to a string value kept alive somewhere else (Chapter 19)
-  * Doing this with lifetimes seems (almost?) impossible: `VM` has both a `Chunk` and a stack, and its stack may have values from multiple chunks, so there's no good `a` for a `Value<'a>`. `Rc` is probably a sane solution to this, but I want to see what future memory management shenanigans we get up to before implementing this. This will probably end up as an arena once I get to GC.
 
 # Dependencies
 

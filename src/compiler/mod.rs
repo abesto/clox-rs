@@ -25,6 +25,7 @@ struct Local<'scanner> {
     name: Token<'scanner>,
     depth: ScopeDepth,
     mutable: bool,
+    is_captured: bool,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -70,6 +71,7 @@ impl<'scanner> NestableState<'scanner> {
                 },
                 depth: ScopeDepth(0),
                 mutable: false,
+                is_captured: false,
             }],
             upvalues: Default::default(),
             globals_by_name: Default::default(),

@@ -18,14 +18,29 @@ pub enum Value {
     Closure(Closure),
     NativeFunction(NativeFunction),
 
-    Upvalue(usize),
+    Upvalue(Upvalue),
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
+pub enum Upvalue {
+    Open(usize),
+    Closed(ValueId),
+}
+
+impl Upvalue {
+    pub fn as_open(&self) -> usize {
+        match self {
+            Upvalue::Open(n) => *n,
+            _ => unreachable!(),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
 pub struct Closure {
     pub function: FunctionId,
     pub upvalues: Vec<ValueId>,
-    pub upvalue_count: u8,
+    pub upvalue_count: usize,
 }
 
 impl Closure {
@@ -88,18 +103,7 @@ impl std::fmt::Display for Value {
             Value::Nil => f.pad("nil"),
             Value::String(s) => f.pad(s),
             Value::Function(function_id) => f.pad(&format!("<fn {}>", *function_id.name)),
-            Value::Closure(closure) => {
-                if config::STD_MODE.load() {
-                    f.pad(&format!("<fn {}>", *closure.function.name))
-                } else {
-                    f.pad(&format!(
-                        "<fn {}:{}:{}>",
-                        *closure.function.name,
-                        closure.upvalue_count,
-                        closure.upvalues.len()
-                    ))
-                }
-            }
+            Value::Closure(closure) => f.pad(&format!("<fn {}>", *closure.function.name)),
             Value::NativeFunction(fun) => {
                 if config::STD_MODE.load() {
                     f.pad("<native fn>")
@@ -131,9 +135,16 @@ impl Value {
         }
     }
 
-    pub fn as_upvalue(&self) -> usize {
+    pub fn upvalue_location(&self) -> &Upvalue {
         match self {
-            Value::Upvalue(v) => *v,
+            Value::Upvalue(v) => v,
+            _ => unreachable!("Expected upvalue, found `{}`", self),
+        }
+    }
+
+    pub fn upvalue_location_mut(&mut self) -> &mut Upvalue {
+        match self {
+            Value::Upvalue(v) => v,
             _ => unreachable!("Expected upvalue, found `{}`", self),
         }
     }
@@ -144,7 +155,7 @@ pub struct Function {
     pub arity: usize,
     pub chunk: Chunk,
     pub name: StringId,
-    pub upvalue_count: u8,
+    pub upvalue_count: usize,
 }
 
 impl Function {

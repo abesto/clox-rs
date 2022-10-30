@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::pin::Pin;
 
 use hashbrown::HashMap;
@@ -5,7 +6,7 @@ use hashbrown::HashMap;
 use crate::arena::ValueId;
 use crate::chunk::InstructionDisassembler;
 use crate::native_functions::NativeFunctions;
-use crate::value::Closure;
+use crate::value::{Closure, Upvalue};
 use crate::{
     arena::{Arena, StringId},
     chunk::{CodeOffset, OpCode},
@@ -91,6 +92,7 @@ pub struct VM {
     frames: Vec<CallFrame>,
     stack: Vec<ValueId>,
     globals: HashMap<StringId, Global>,
+    open_upvalues: VecDeque<ValueId>,
 }
 
 impl VM {
@@ -103,6 +105,7 @@ impl VM {
             frames: Vec::with_capacity(crate::config::FRAMES_MAX),
             stack: Vec::with_capacity(crate::config::STACK_MAX),
             globals: HashMap::new(),
+            open_upvalues: VecDeque::new(),
         }
     }
 
@@ -238,13 +241,13 @@ impl VM {
                                 .push((*self.frame().closure).as_closure().upvalues[index]);
                         }
                     }
-                    /*/
-                    eprintln!(
-                        "{} {} {:?}",
-                        *closure.function.name,
-                        closure.upvalue_count,
-                        closure.upvalues[0].as_upvalue()
-                    );
+
+                    /*
+                    eprint!("{} {} ", *closure.function.name, closure.upvalue_count);
+                    for v in &closure.upvalues {
+                        eprint!("{} ", v.upvalue_location().as_open());
+                    }
+                    eprintln!();
                     */
 
                     let closure_id = self.arena.add_value(Value::from(closure));
@@ -292,9 +295,15 @@ impl VM {
                     */
                     let upvalue_index =
                         usize::from(self.read_byte("Missing argument for OP_GET_UPVALUE"));
-                    let absolute_local_index =
-                        self.frame().closure.as_closure().upvalues[upvalue_index].as_upvalue();
-                    self.stack_push(self.stack[absolute_local_index]);
+                    let upvalue_location = self.frame().closure.as_closure().upvalues
+                        [upvalue_index]
+                        .upvalue_location();
+                    match *upvalue_location {
+                        Upvalue::Open(absolute_local_index) => {
+                            self.stack_push(self.stack[absolute_local_index]);
+                        }
+                        Upvalue::Closed(value_id) => self.stack_push(value_id),
+                    }
                 }
                 OpCode::SetUpvalue => {
                     /*
@@ -309,14 +318,29 @@ impl VM {
                     */
                     let upvalue_index =
                         usize::from(self.read_byte("Missing argument for OP_SET_UPVALUE"));
-                    let absolute_local_index =
-                        self.frame().closure.as_closure().upvalues[upvalue_index].as_upvalue();
+                    let upvalue_location = self.frame().closure.as_closure().upvalues
+                        [upvalue_index]
+                        .upvalue_location()
+                        // TODO get rid of this `.clone()`
+                        .clone();
                     // eprintln!("overwriting {}", *self.stack[absolute_local_index]);
-                    *self.stack[absolute_local_index] = self
+                    let new_value = self
                         .stack
                         .last()
                         .map(|x| (**x).clone())
                         .expect("Stack underflow in OP_SET_UPVALUE");
+                    match upvalue_location {
+                        Upvalue::Open(absolute_local_index) => {
+                            *self.stack[absolute_local_index] = new_value;
+                        }
+                        Upvalue::Closed(mut value_id) => {
+                            *value_id = new_value;
+                        }
+                    }
+                }
+                OpCode::CloseUpvalue => {
+                    self.close_upvalues(self.stack.len() - 1);
+                    self.stack.pop();
                 }
             };
         }
@@ -445,6 +469,7 @@ impl VM {
             self.stack.pop();
             return Some(InterpretResult::Ok);
         }
+        self.close_upvalues(frame.stack_base);
         self.stack.truncate(frame.stack_base);
         self.stack_push(result.expect("Stack underflow in OP_RETURN"));
         None
@@ -660,9 +685,64 @@ impl VM {
         }
     }
 
-    fn capture_upvalue(&mut self, index: usize) -> ValueId {
-        let upvalue = Value::Upvalue(self.frame().stack_base + index);
-        self.arena.add_value(upvalue)
+    fn capture_upvalue(&mut self, local: usize) -> ValueId {
+        let local = self.frame().stack_base + local;
+        let mut upvalue_index = 0;
+        let mut upvalue = None;
+
+        for (i, this) in self.open_upvalues.iter().enumerate() {
+            if this.upvalue_location().as_open() <= local {
+                break;
+            }
+            upvalue = Some(this);
+            upvalue_index = i;
+        }
+
+        if let Some(upvalue) = upvalue {
+            if upvalue.upvalue_location().as_open() == local {
+                return *upvalue;
+            }
+        }
+
+        let upvalue = Value::Upvalue(Upvalue::Open(local));
+        let upvalue_id = self.arena.add_value(upvalue);
+        self.open_upvalues.insert(upvalue_index, upvalue_id);
+
+        /*
+        eprintln!(
+            "inserted {} at {} -> {}",
+            local,
+            upvalue_index,
+            self.open_upvalues
+                .iter()
+                .map(|v| v.upvalue_location().as_open().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        */
+
+        upvalue_id
+    }
+
+    fn close_upvalues(&mut self, last: usize) {
+        while self
+            .open_upvalues
+            .get(0)
+            .map(|v| v.upvalue_location().as_open() >= last)
+            .unwrap_or(false)
+        {
+            let mut upvalue = self.open_upvalues.pop_front().unwrap();
+            debug_assert!(matches!(*upvalue, Value::Upvalue(_)));
+            /*
+            eprintln!(
+                "Closing stack index {} >= {}",
+                upvalue.upvalue_location().as_open(),
+                last
+            );
+            */
+            let pointed_value = self.stack[upvalue.upvalue_location().as_open()];
+            *upvalue.upvalue_location_mut() = Upvalue::Closed(pointed_value);
+        }
     }
 
     fn execute_call(&mut self, closure: ValueId, arg_count: u8) -> bool {

@@ -18,7 +18,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         **self.scope_depth_mut() -= 1;
         let scope_depth = self.scope_depth();
 
-        let mut dropped = 0;
+        let mut instructions = vec![];
 
         {
             let locals = self.locals_mut();
@@ -27,13 +27,17 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
                 .map(|local| local.depth > scope_depth)
                 .unwrap_or(false)
             {
-                dropped += 1;
+                instructions.push(if locals.last().unwrap().is_captured {
+                    OpCode::CloseUpvalue
+                } else {
+                    OpCode::Pop
+                });
                 locals.pop();
             }
         }
 
-        for _ in 0..dropped {
-            self.emit_byte(OpCode::Pop);
+        for instruction in instructions {
+            self.emit_byte(instruction);
         }
     }
 
@@ -151,6 +155,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
 
         if let Some(local) = self.in_enclosing(|compiler| compiler.resolve_local(name.to_string()))
         {
+            self.in_enclosing(|compiler| compiler.locals_mut()[local].is_captured = true);
             return Some(self.add_upvalue(local, true));
         }
 
@@ -174,19 +179,19 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
                 return u8::try_from(upvalue_index).unwrap();
             }
 
+            if self.upvalues().len() >= usize::from(u8::MAX) + 1 {
+                self.error("Too many closure variables in function.");
+                return 0;
+            }
+
             // Record new upvalue
             self.upvalues_mut().push(Upvalue {
                 index: local_index,
                 is_local,
             });
             let upvalue_count = self.upvalues().len();
-            if let Ok(upvalue_count) = u8::try_from(upvalue_count) {
-                self.current_function_mut().upvalue_count = upvalue_count;
-                upvalue_count - 1
-            } else {
-                self.error("Too many closure variables in function.");
-                0
-            }
+            self.current_function_mut().upvalue_count = upvalue_count;
+            u8::try_from(upvalue_count - 1).unwrap()
         } else {
             // This is where `(Get|Set)UpvalueLong` would go
             self.error("Too variables in function surrounding closure.");
@@ -204,6 +209,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
             name,
             depth: ScopeDepth(-1),
             mutable,
+            is_captured: false,
         });
     }
 

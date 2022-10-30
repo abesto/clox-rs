@@ -38,6 +38,7 @@ pub enum OpCode {
 
     GetUpvalue,
     SetUpvalue,
+    CloseUpvalue,
 
     GetLocal,
     GetLocalLong,
@@ -200,7 +201,7 @@ impl<'chunk> InstructionDisassembler<'chunk> {
         std::mem::size_of::<OpCode>()
             + match opcode {
                 Negate | Add | Subtract | Multiply | Divide | Nil | True | False | Not | Equal
-                | Greater | Less | Print | Pop | Dup => 0,
+                | Greater | Less | Print | Pop | Dup | CloseUpvalue => 0,
                 Constant | GetLocal | SetLocal | GetGlobal | SetGlobal | DefineGlobal
                 | DefineGlobalConst | Return | Call | GetUpvalue | SetUpvalue => 1,
                 JumpIfFalse | Jump | Loop => 2,
@@ -410,12 +411,27 @@ impl<'chunk> std::fmt::Debug for InstructionDisassembler<'chunk> {
                 SetGlobalLong
             ),
             closure(Closure),
-            byte(GetLocal, SetLocal, Call, GetUpvalue, SetUpvalue),
+            byte(GetLocal, SetLocal, Call, GetUpvalue, SetUpvalue,),
             byte_long(GetLocalLong, SetLocalLong),
             jump(Jump, JumpIfFalse, Loop),
             simple(
-                Nil, True, False, Return, Negate, Pop, Equal, Greater, Less, Add, Subtract,
-                Multiply, Divide, Not, Print, Dup
+                Nil,
+                True,
+                False,
+                Return,
+                Negate,
+                Pop,
+                Equal,
+                Greater,
+                Less,
+                Add,
+                Subtract,
+                Multiply,
+                Divide,
+                Not,
+                Print,
+                Dup,
+                CloseUpvalue
             ),
         )?;
         Ok(())
