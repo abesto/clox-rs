@@ -10,6 +10,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
   * `Token`s store the "pointer" to the lexeme as a slice.
   * `CallFrame::slots` is a `Value*` in C; a direct translation would be a slice into `VM::stack`, but I can't easily sort out the lifetimes there. So: simple index again! I keep wondering about the performance.
 * `#define`-controlled features initially translated to Cargo features; after the third one I switched them to command-line arguments to simplify my life and save time on recompiling. The values are stored in global atomic bools in `config.rs`.
+  * A notable flag is `--std` that disables all non-standard behavior; in this mode, `clox-rs` passes the original `clox` test suite.
 * `VM::binary_op` is a higher-order function instead of a macro; hopefully this will be good enough later on.
 * Unlike [`jlox-rs`](https://github.com/abesto/jlox-rs/), error reporting on initial implementation follows closely the error reporting logic of the book so that I have less to mentally juggle. Might end up refactoring afterwards to use `Result`s.
 * `Scanner`: the `start` / `current` pointer pair is implemented with indices and slices. Using iterators *may* be more performant, and there may be a way to do that, but timed out on it for now.
@@ -43,6 +44,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * 23/3: `continue` statements. Made a naive implementation, got confused about scopes and missed some edge cases; ported the solution from the book repo.
 * 24/1: arity check on native functions
 * 24/3: native functions can report runtime errors
+* 25/2: alias loop variables for the loop body
 * TODO ternary operator
 * STRETCH: add error handling to user code
 

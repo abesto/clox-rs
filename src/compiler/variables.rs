@@ -199,7 +199,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         }
     }
 
-    fn add_local(&mut self, name: Token<'scanner>, mutable: bool) {
+    pub(super) fn add_local(&mut self, name: Token<'scanner>, mutable: bool) {
         let limit_exp = if config::STD_MODE.load() { 8 } else { 24 };
         if self.locals().len() > usize::pow(2, limit_exp) - 1 {
             self.error("Too many local variables in function.");

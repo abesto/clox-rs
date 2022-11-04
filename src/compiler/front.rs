@@ -141,23 +141,37 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         self.begin_scope();
         self.consume(TK::LeftParen, "Expect '(' after 'for'.");
 
-        if self.match_(TK::Semicolon) {
+        // Compile initializer, store loop variable
+        let loop_var_and_name = if self.match_(TK::Semicolon) {
             // No initializer
-        } else if self.match_(TK::Var) {
-            self.var_declaration(true);
-        } else if self.match_(TK::Const) {
-            // This doesn't seem useful but I won't stop you
-            self.var_declaration(false);
+            None
+        } else if self.match_(TK::Var) || self.match_(TK::Const) {
+            let name = self.current.clone().unwrap();
+            self.var_declaration(self.check_previous(TK::Var));
+            // Challenge 25/2: alias loop variables
+            if crate::config::STD_MODE.load() {
+                None
+            } else {
+                if let Ok(loop_var) = u8::try_from(self.locals().len() - 1) {
+                    Some((loop_var, name))
+                } else {
+                    self.error("Creating loop variable led to too many locals.");
+                    None
+                }
+            }
         } else {
             self.expression_statement();
-        }
+            None
+        };
 
+        // Store old loop state to restore at then end
         let old_loop_state = {
             let start = CodeOffset(self.current_chunk_len());
             let depth = self.scope_depth();
             std::mem::replace(self.loop_state_mut(), Some(LoopState { depth, start }))
         };
 
+        // Compile loop condition
         let mut exit_jump = None;
         if !self.match_(TK::Semicolon) {
             self.expression();
@@ -166,6 +180,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
             self.emit_byte(OpCode::Pop);
         }
 
+        // Compile "i = i + 1" clause (what's this actually called?)
         if !self.match_(TK::RightParen) {
             let body_jump = self.emit_jump(OpCode::Jump);
             let increment_start = CodeOffset(self.current_chunk_len());
@@ -179,7 +194,32 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
             self.patch_jump(body_jump);
         }
 
+        // Alias loop variable for this iteration of the loop
+        let loop_and_inner_var = if let Some((loop_var, loop_var_name)) = loop_var_and_name {
+            self.begin_scope();
+            self.emit_bytes(OpCode::GetLocal, loop_var);
+            self.add_local(loop_var_name, true);
+            self.mark_initialized();
+            if let Ok(inner_var) = u8::try_from(self.locals().len() - 1) {
+                Some((loop_var, inner_var))
+            } else {
+                self.error("Aliasing loop variable led to too many locals.");
+                None
+            }
+        } else {
+            None
+        };
+
         self.statement();
+
+        // Clean up alias for loop variable
+        if let Some((loop_var, inner_var)) = loop_and_inner_var {
+            self.emit_bytes(OpCode::GetLocal, inner_var);
+            self.emit_bytes(OpCode::SetLocal, loop_var);
+            self.emit_byte(OpCode::Pop);
+            self.end_scope();
+        }
+
         let loop_start = self.loop_state().as_ref().unwrap().start;
         self.emit_loop(loop_start);
 
