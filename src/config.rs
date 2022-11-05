@@ -27,3 +27,5 @@ impl GlobalFlag {
 pub static STD_MODE: GlobalFlag = GlobalFlag::new();
 pub static TRACE_EXECUTION: GlobalFlag = GlobalFlag::new();
 pub static PRINT_CODE: GlobalFlag = GlobalFlag::new();
+pub static STRESS_GC: GlobalFlag = GlobalFlag::new();
+pub static LOG_GC: GlobalFlag = GlobalFlag::new();

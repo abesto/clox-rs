@@ -106,6 +106,10 @@ impl Chunk {
         }
     }
 
+    pub fn constants(&self) -> &[ValueId] {
+        &self.constants
+    }
+
     pub fn code(&self) -> &[u8] {
         &self.code
     }

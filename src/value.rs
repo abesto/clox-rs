@@ -158,6 +158,12 @@ pub struct Function {
     pub upvalue_count: usize,
 }
 
+impl std::fmt::Display for Function {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.pad(&format!("<fn {}>", *self.name))
+    }
+}
+
 impl Function {
     #[must_use]
     pub fn new(arity: usize, name: StringId) -> Self {

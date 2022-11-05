@@ -11,6 +11,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
   * `CallFrame::slots` is a `Value*` in C; a direct translation would be a slice into `VM::stack`, but I can't easily sort out the lifetimes there. So: simple index again! I keep wondering about the performance.
 * `#define`-controlled features initially translated to Cargo features; after the third one I switched them to command-line arguments to simplify my life and save time on recompiling. The values are stored in global atomic bools in `config.rs`.
   * A notable flag is `--std` that disables all non-standard behavior; in this mode, `clox-rs` passes the original `clox` test suite.
+  * Doing anything at runtime instead of compile time obviously has some overhead. For this toy project, I'll take the added convenience of not having to recompile, as long as profiling doesn't say checking one of these flags adds significant overhead. (Yes, anything that reads one of the flags on a hot path caches the value so it doesn't trigger an atomic read each time)
 * `VM::binary_op` is a higher-order function instead of a macro; hopefully this will be good enough later on.
 * Unlike [`jlox-rs`](https://github.com/abesto/jlox-rs/), error reporting on initial implementation follows closely the error reporting logic of the book so that I have less to mentally juggle. Might end up refactoring afterwards to use `Result`s.
 * `Scanner`: the `start` / `current` pointer pair is implemented with indices and slices. Using iterators *may* be more performant, and there may be a way to do that, but timed out on it for now.
@@ -25,11 +26,14 @@ Things that were hard, and particularly things where I deviate from `clox` prope
   * Finally: I completely dropped the idea of a stack of compiler instances. I have just the one compiler, with a stack of nestable *states* managed explicitly.
 * The book stores the list of open `Upvalue`s in a poor man's linked list. Rust has a `LinkedList` in its stdlib, but it doesn't expose a way to insert an item in the middle in O(1) time given a pointer at an item. <https://github.com/rust-lang/rust/issues/58533> tracks adding a `Cursor` API that would enable this. The book also makes an argument that this is not *quite* performance critical. Instead of trying to implement a half-assed linked list in Rust (which is known to be hard), I'll just throw a `VecDeque` at this. We'll store `ValueId`s, so we get pointer-like semantics in that we'll point at the same single instance of the value (i.e. variable vs value).
 * The book stores closed `Upvalue`s with some neat pointer trickery. We can't follow there; instead, `Upvalue` is now an enum with an `Open(usize)` and a `Closed(ValueId)` variant.
+* The book makes GC decisions (at least of the stress-testing kind) whenever memory is allocated. Our direct translation would be the `Arena::add_*` methods, but lifetimes make injecting roots there tricky. Instead in `clox-rs` GC is (potentially) triggered between the execution of each instruction.
+* The initial `Arena` implementation used `Vec`s as the backing store. This falls apart at GC: the "smart pointers" (e.g. `ValueId`) carry around an index into the `Vec`, but GC compresses the `Vec`, and so all smart pointers become invalid. There's probably a smart and efficient way around this. Instead of figuring that out, I switched the backing store to a `HashMap`, plus a storage for free ids (i.e. ones that have been removed before and can now be reused).
 
 # TODO
 
 * Drop the VM stack after we're done interpreting a piece of code. In the REPL, stuff can stay there after runtime errors.
 * Possible optimization: copy-on-write for `Value`s stored in the `Arena`
+* All the macros DRY-ing `Arena` are kinda tedious. Refactor to use generics somehow?
 
 # Challenges
 

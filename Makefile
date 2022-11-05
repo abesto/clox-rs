@@ -1,7 +1,7 @@
 CRAFTING_INTERPRETERS ?= ../craftinginterpreters
 DEBUG_BIN := target/debug/clox-rs
 
-test_level := chap25_closures
+test_level := chap26_garbage
 sources := src/*.rs src/compiler/*.rs Cargo.toml
 
 $(DEBUG_BIN): $(sources)
@@ -15,11 +15,14 @@ cargo-test:
 craftinginterpreters-test: $(DEBUG_BIN)
 	$(eval home := $(shell pwd))
 	cd $(CRAFTING_INTERPRETERS) && \
+		dart tool/bin/test.dart $(test_level) --interpreter $(home)/$(DEBUG_BIN) --arguments --std --arguments --stress-gc
+	cd $(CRAFTING_INTERPRETERS) && \
 		dart tool/bin/test.dart $(test_level) --interpreter $(home)/$(DEBUG_BIN) --arguments --std
 
 
 .PHONY: custom-dart-test
 custom-dart-test: $(DEBUG_BIN)
+	dart $(CRAFTING_INTERPRETERS)/tool/bin/test.dart clox --interpreter $(DEBUG_BIN) --arguments --stress-gc
 	dart $(CRAFTING_INTERPRETERS)/tool/bin/test.dart clox --interpreter $(DEBUG_BIN)
 
 .PHONY: test
