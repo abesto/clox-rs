@@ -154,9 +154,7 @@ impl VM {
                 );
                 print!("{:?}", disassembler);
             }
-            if stress_gc {
-                self.collect_garbage();
-            }
+            self.collect_garbage(stress_gc);
             match OpCode::try_from(self.read_byte("instruction"))
                 .expect("Internal error: unrecognized opcode")
             {
@@ -793,7 +791,11 @@ impl VM {
         );
     }
 
-    fn collect_garbage(&mut self) {
+    fn collect_garbage(&mut self, stress_gc: bool) {
+        if !stress_gc && !self.arena.needs_gc() {
+            return;
+        }
+
         self.arena.gc_start();
 
         // Mark roots

@@ -60,6 +60,8 @@ macro_rules! arena_methods {
                              );
                 }
 
+                self.bytes_allocated += std::mem::size_of::<$t>();
+
                 [<$t Id>] {
                     id,
                     arena: &mut *self,
@@ -85,6 +87,9 @@ macro_rules! arena_methods {
                                   id,
                                   value
                                  );
+                    }
+                    if !retain {
+                        self.bytes_allocated -= std::mem::size_of::<$t>();
                     }
                     *marked = false;
                     retain
@@ -210,6 +215,9 @@ pub struct Arena {
     gray_strings: Vec<usize>,
     gray_values: Vec<usize>,
     gray_functions: Vec<usize>,
+
+    bytes_allocated: usize,
+    next_gc: usize,
 }
 
 impl Arena {
@@ -223,12 +231,19 @@ impl Arena {
             gray_strings: Vec::new(),
             gray_values: Vec::new(),
             gray_functions: Vec::new(),
+
+            bytes_allocated: 0,
+            next_gc: 1024 * 1024,
         }
     }
 
     arena_methods!(String);
     arena_methods!(Value);
     arena_methods!(Function);
+
+    pub fn needs_gc(&self) -> bool {
+        self.bytes_allocated > self.next_gc
+    }
 
     pub fn gc_start(&self) {
         if self.log_gc {
@@ -297,12 +312,22 @@ impl Arena {
         if self.log_gc {
             eprintln!("-- sweep start");
         }
+
+        let before = self.bytes_allocated;
         self.sweep_values();
         self.sweep_functions();
         self.sweep_strings();
 
+        self.next_gc = self.bytes_allocated * crate::config::GC_HEAP_GROW_FACTOR;
         if self.log_gc {
             eprintln!("-- gc end");
+            eprintln!(
+                "   collected {} (from {} to {}) next at {}",
+                humansize::format_size(before - self.bytes_allocated, humansize::BINARY),
+                humansize::format_size(before, humansize::BINARY),
+                humansize::format_size(self.bytes_allocated, humansize::BINARY),
+                humansize::format_size(self.next_gc, humansize::BINARY),
+            );
         }
     }
 }
