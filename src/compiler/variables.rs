@@ -104,7 +104,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         }
     }
 
-    fn identifier_constant<S>(&mut self, name: S) -> ConstantLongIndex
+    pub(super) fn identifier_constant<S>(&mut self, name: S) -> ConstantLongIndex
     where
         S: ToString,
     {

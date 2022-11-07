@@ -286,6 +286,7 @@ impl Arena {
                 }
             }
             Value::Upvalue(Upvalue::Closed(value_id)) => self.gray_values.push(value_id.id),
+            Value::Class(c) => self.gray_strings.push(c.name.id),
         }
     }
 

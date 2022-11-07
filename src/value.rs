@@ -19,6 +19,8 @@ pub enum Value {
     NativeFunction(NativeFunction),
 
     Upvalue(Upvalue),
+
+    Class(Class),
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
@@ -95,6 +97,12 @@ impl From<Closure> for Value {
     }
 }
 
+impl From<Class> for Value {
+    fn from(c: Class) -> Self {
+        Value::Class(c)
+    }
+}
+
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -112,6 +120,7 @@ impl std::fmt::Display for Value {
                 }
             }
             Value::Upvalue(_) => f.pad("upvalue"),
+            Value::Class(c) => f.pad(&format!("<class {}>", *c.name)),
         }
     }
 }
@@ -195,4 +204,16 @@ pub type NativeFunctionImpl = fn(&[Value]) -> Result<Value, String>;
 
 fn always_equals<T>(_: &T, _: &T) -> bool {
     true
+}
+
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
+pub struct Class {
+    pub name: StringId,
+}
+
+impl Class {
+    #[must_use]
+    pub fn new(name: StringId) -> Self {
+        Class { name }
+    }
 }

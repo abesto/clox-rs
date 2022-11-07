@@ -1,6 +1,6 @@
 use super::{rules::Precedence, Compiler, FunctionType, LoopState};
 use crate::{
-    chunk::{CodeOffset, OpCode},
+    chunk::{CodeOffset, ConstantIndex, OpCode},
     scanner::TokenKind as TK,
     types::Line,
 };
@@ -109,6 +109,23 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         for upvalue in nested_upvalues {
             self.emit_bytes(upvalue.is_local, upvalue.index);
         }
+    }
+
+    fn class_declaration(&mut self) {
+        self.consume(TK::Identifier, "Expect class name.");
+        let name_constant =
+            self.identifier_constant(self.previous.as_ref().unwrap().as_str().to_string());
+        self.declare_variable(false);
+
+        self.emit_bytes(
+            OpCode::Class,
+            ConstantIndex::try_from(name_constant)
+                .expect("Too many constants when declaring class."),
+        );
+        self.define_variable(Some(name_constant), false);
+
+        self.consume(TK::LeftBrace, "Expect '{' before class body.");
+        self.consume(TK::RightBrace, "Expect '}' after class body.");
     }
 
     fn fun_declaration(&mut self) {
@@ -343,7 +360,9 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     }
 
     pub(super) fn declaration(&mut self) {
-        if self.match_(TK::Fun) {
+        if self.match_(TK::Class) {
+            self.class_declaration();
+        } else if self.match_(TK::Fun) {
             self.fun_declaration();
         } else if self.match_(TK::Var) {
             self.var_declaration(true);

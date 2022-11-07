@@ -6,7 +6,7 @@ use hashbrown::HashMap;
 use crate::arena::ValueId;
 use crate::chunk::InstructionDisassembler;
 use crate::native_functions::NativeFunctions;
-use crate::value::{Closure, Upvalue};
+use crate::value::{Class, Closure, Upvalue};
 use crate::{
     arena::{Arena, StringId},
     chunk::{CodeOffset, OpCode},
@@ -286,15 +286,6 @@ impl VM {
                 OpCode::Less => binary_op!(self, <),
 
                 OpCode::GetUpvalue => {
-                    /*
-                    let closure = self.frame().closure.as_closure();
-                    eprintln!(
-                        "{} {} {:?}",
-                        *closure.function.name,
-                        closure.upvalue_count,
-                        closure.upvalues.len()
-                    );
-                    */
                     let upvalue_index =
                         usize::from(self.read_byte("Missing argument for OP_GET_UPVALUE"));
                     let upvalue_location = self.frame().closure.as_closure().upvalues
@@ -308,16 +299,6 @@ impl VM {
                     }
                 }
                 OpCode::SetUpvalue => {
-                    /*
-                    let closure = self.frame().closure.as_closure();
-                    eprintln!(
-                        "{} {} {:?} = {:?}",
-                        *closure.function.name,
-                        closure.upvalue_count,
-                        closure.upvalues.len(),
-                        self.stack.last()
-                    );
-                    */
                     let upvalue_index =
                         usize::from(self.read_byte("Missing argument for OP_SET_UPVALUE"));
                     let upvalue_location = self.frame().closure.as_closure().upvalues
@@ -325,7 +306,6 @@ impl VM {
                         .upvalue_location()
                         // TODO get rid of this `.clone()`
                         .clone();
-                    // eprintln!("overwriting {}", *self.stack[absolute_local_index]);
                     let new_value = self
                         .stack
                         .last()
@@ -340,9 +320,20 @@ impl VM {
                         }
                     }
                 }
+
                 OpCode::CloseUpvalue => {
                     self.close_upvalues(self.stack.len() - 1);
                     self.stack.pop();
+                }
+
+                OpCode::Class => {
+                    let class = match &**self.read_constant(false) {
+                        Value::String(string_id) => Class::new(*string_id),
+                        x => {
+                            panic!("Non-string operand to OP_CLASS: `{}`", x);
+                        }
+                    };
+                    self.stack_push_value(class.into());
                 }
             };
         }

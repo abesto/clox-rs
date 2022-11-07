@@ -16,8 +16,23 @@ pub struct CodeOffset(pub usize);
 #[derive(Shrinkwrap, Clone, Copy)]
 pub struct ConstantIndex(pub u8);
 
+impl From<ConstantIndex> for u8 {
+    fn from(index: ConstantIndex) -> Self {
+        index.0
+    }
+}
+
 #[derive(Shrinkwrap, Clone, Copy)]
 pub struct ConstantLongIndex(pub usize);
+
+impl TryFrom<ConstantLongIndex> for ConstantIndex {
+    type Error = <u8 as TryFrom<usize>>::Error;
+
+    fn try_from(value: ConstantLongIndex) -> Result<Self, Self::Error> {
+        let short = u8::try_from(value.0)?;
+        Ok(ConstantIndex(short))
+    }
+}
 
 #[derive(IntoPrimitive, TryFromPrimitive, PartialEq, Eq, Debug, Clone, Copy)]
 #[repr(u8)]
@@ -70,6 +85,8 @@ pub enum OpCode {
 
     Print,
     Return,
+
+    Class,
 }
 
 impl OpCode {
@@ -207,7 +224,7 @@ impl<'chunk> InstructionDisassembler<'chunk> {
                 Negate | Add | Subtract | Multiply | Divide | Nil | True | False | Not | Equal
                 | Greater | Less | Print | Pop | Dup | CloseUpvalue => 0,
                 Constant | GetLocal | SetLocal | GetGlobal | SetGlobal | DefineGlobal
-                | DefineGlobalConst | Return | Call | GetUpvalue | SetUpvalue => 1,
+                | DefineGlobalConst | Return | Call | GetUpvalue | SetUpvalue | Class => 1,
                 JumpIfFalse | Jump | Loop => 2,
                 ConstantLong
                 | GetGlobalLong
@@ -415,7 +432,7 @@ impl<'chunk> std::fmt::Debug for InstructionDisassembler<'chunk> {
                 SetGlobalLong
             ),
             closure(Closure),
-            byte(GetLocal, SetLocal, Call, GetUpvalue, SetUpvalue,),
+            byte(GetLocal, SetLocal, Call, GetUpvalue, SetUpvalue, Class),
             byte_long(GetLocalLong, SetLocalLong),
             jump(Jump, JumpIfFalse, Loop),
             simple(
