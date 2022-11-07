@@ -287,6 +287,13 @@ impl Arena {
             }
             Value::Upvalue(Upvalue::Closed(value_id)) => self.gray_values.push(value_id.id),
             Value::Class(c) => self.gray_strings.push(c.name.id),
+            Value::Instance(instance) => {
+                self.gray_values.push(instance.class.id);
+                for (field, value) in instance.fields.iter() {
+                    self.gray_strings.push(field.id);
+                    self.gray_values.push(value.id);
+                }
+            }
         }
     }
 

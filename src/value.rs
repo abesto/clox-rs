@@ -1,4 +1,5 @@
 use derivative::Derivative;
+use hashbrown::HashMap;
 
 use crate::{
     arena::{FunctionId, StringId, ValueId},
@@ -21,6 +22,7 @@ pub enum Value {
     Upvalue(Upvalue),
 
     Class(Class),
+    Instance(Instance),
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
@@ -103,6 +105,12 @@ impl From<Class> for Value {
     }
 }
 
+impl From<Instance> for Value {
+    fn from(i: Instance) -> Self {
+        Value::Instance(i)
+    }
+}
+
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -121,6 +129,10 @@ impl std::fmt::Display for Value {
             }
             Value::Upvalue(_) => f.pad("upvalue"),
             Value::Class(c) => f.pad(&format!("<class {}>", *c.name)),
+            Value::Instance(instance) => f.pad(&format!(
+                "<{} instance>",
+                *(*instance.class).as_class().name
+            )),
         }
     }
 }
@@ -141,6 +153,13 @@ impl Value {
         match self {
             Value::Function(f) => f,
             _ => unreachable!("Expected Function, found `{}`", self),
+        }
+    }
+
+    pub fn as_class(&self) -> &Class {
+        match self {
+            Value::Class(c) => &c,
+            _ => unreachable!("Expected Class, found `{}`", self),
         }
     }
 
@@ -215,5 +234,23 @@ impl Class {
     #[must_use]
     pub fn new(name: StringId) -> Self {
         Class { name }
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Debug, PartialEq, PartialOrd, Clone)]
+pub struct Instance {
+    pub class: ValueId,
+    #[derivative(PartialOrd = "ignore")]
+    pub fields: HashMap<StringId, ValueId>,
+}
+
+impl Instance {
+    #[must_use]
+    pub fn new(class: ValueId) -> Self {
+        Instance {
+            class,
+            fields: HashMap::new(),
+        }
     }
 }

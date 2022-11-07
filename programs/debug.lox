@@ -1,2 +1,3 @@
 class Foo {}
 print Foo;
+print Foo();

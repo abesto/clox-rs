@@ -6,7 +6,7 @@ use hashbrown::HashMap;
 use crate::arena::ValueId;
 use crate::chunk::InstructionDisassembler;
 use crate::native_functions::NativeFunctions;
-use crate::value::{Class, Closure, Upvalue};
+use crate::value::{Class, Closure, Instance, Upvalue};
 use crate::{
     arena::{Arena, StringId},
     chunk::{CodeOffset, OpCode},
@@ -670,6 +670,13 @@ impl VM {
                         }
                     }
                 }
+            }
+            Value::Class(_) => {
+                let instance_id: ValueId = self.arena.add_value(Instance::new(callee).into());
+                // Replace the class with the instance on the stack
+                let stack_index = self.stack_base() + 1;
+                self.stack[stack_index] = instance_id;
+                true
             }
             _ => {
                 runtime_error!(self, "Can only call functions and classes.");
