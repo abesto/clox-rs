@@ -49,6 +49,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * 24/1: arity check on native functions
 * 24/3: native functions can report runtime errors
 * 25/2: alias loop variables for the loop body
+* 27/1: reading an undefined field returns `nil`
 * MAYBE: generational GC
 * MAYBE: ternary operator (not super interesting)
 * STRETCH: add error handling to user code

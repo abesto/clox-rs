@@ -362,6 +362,9 @@ impl VM {
                     if let Some(value) = instance.fields.get(&field) {
                         self.stack.pop(); // instance
                         self.stack_push(*value);
+                    } else if !std_mode {
+                        self.stack.pop(); // instance
+                        self.stack_push(self.builtin_constants.nil);
                     } else {
                         runtime_error!(self, "Undefined property '{}'.", *field);
                         return InterpretResult::RuntimeError;

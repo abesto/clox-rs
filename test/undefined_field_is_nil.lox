@@ -1,0 +1,7 @@
+class C {}
+
+var x = C();
+x.a = "foo";
+
+print x.a;  // expect: foo
+print x.b;  // expect: nil
