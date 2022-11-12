@@ -128,7 +128,13 @@ impl std::fmt::Display for Value {
                 }
             }
             Value::Upvalue(_) => f.pad("upvalue"),
-            Value::Class(c) => f.pad(&format!("<class {}>", *c.name)),
+            Value::Class(c) => {
+                if config::STD_MODE.load() {
+                    f.pad(&*c.name)
+                } else {
+                    f.pad(&format!("<class {}>", *c.name))
+                }
+            }
             Value::Instance(instance) => f.pad(&format!(
                 "<{} instance>",
                 *(*instance.class).as_class().name
@@ -160,6 +166,13 @@ impl Value {
         match self {
             Value::Class(c) => &c,
             _ => unreachable!("Expected Class, found `{}`", self),
+        }
+    }
+
+    pub fn as_instance_mut(&mut self) -> &mut Instance {
+        match self {
+            Value::Instance(i) => i,
+            _ => unreachable!("Expected Instance, found `{}`", self),
         }
     }
 

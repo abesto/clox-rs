@@ -1,3 +1,4 @@
 class Foo {}
-print Foo;
-print Foo();
+var foo = Foo();
+foo.bar = "bar value"; 
+//print foo.bar; // expect: bar value

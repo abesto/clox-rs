@@ -72,7 +72,7 @@ pub(super) fn make_rules<'scanner, 'arena>() -> Rules<'scanner, 'arena> {
         Colon        = [None,     None,   None],
         Comma        = [None,     None,   None],
         Default      = [None,     None,   None],
-        Dot          = [None,     None,   None],
+        Dot          = [None,     dot,    Call],
         Minus        = [unary,    binary, Term],
         Plus         = [None,     binary, Term],
         Semicolon    = [None,     None,   None],
@@ -188,6 +188,23 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
     fn call(&mut self, _can_assign: bool) {
         let arg_count = self.argument_list();
         self.emit_bytes(OpCode::Call, arg_count);
+    }
+
+    fn dot(&mut self, can_assign: bool) {
+        self.consume(TK::Identifier, "Expect property name after '.'.");
+        let name_constant =
+            self.identifier_constant(self.previous.as_ref().unwrap().as_str().to_string());
+
+        if can_assign && self.match_(TK::Equal) {
+            self.expression();
+            self.emit_byte(OpCode::SetProperty);
+        } else {
+            self.emit_byte(OpCode::GetProperty);
+        }
+
+        if !self.emit_number(name_constant.0, false) {
+            self.error("Too many constants created by property access.");
+        }
     }
 
     fn literal(&mut self, _can_assign: bool) {

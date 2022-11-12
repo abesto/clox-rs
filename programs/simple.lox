@@ -1,5 +1,6 @@
 fun f() {
-  print 3;
+  var x = 4;
+  print 3 + x;
 }
 
 f();

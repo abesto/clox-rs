@@ -139,6 +139,7 @@ impl VM {
     fn run(&mut self) -> InterpretResult {
         let trace_execution = config::TRACE_EXECUTION.load();
         let stress_gc = config::STRESS_GC.load();
+        let std_mode = config::STD_MODE.load();
         loop {
             if trace_execution {
                 let function = &self.frame().closure().function;
@@ -169,7 +170,7 @@ impl VM {
                 }
                 OpCode::Dup => {
                     self.stack_push_value(
-                        (**self.stack.last().expect("stack underflow in OP_DUP")).clone(),
+                        (**self.peek(0).expect("stack underflow in OP_DUP")).clone(),
                     );
                 }
                 op @ (OpCode::GetLocal | OpCode::GetLocalLong) => self.get_local(op),
@@ -335,7 +336,83 @@ impl VM {
                     };
                     self.stack_push_value(class.into());
                 }
+                OpCode::GetProperty => {
+                    let field = match &**self.read_constant(false) {
+                        Value::String(string_id) => string_id.clone(),
+                        x => {
+                            panic!("Non-string property name to GET_PROPERTY: `{}`", x);
+                        }
+                    };
+                    let instance = match &**self.peek(0).expect("Stack underflow in GET_PROPERTY") {
+                        Value::Instance(instance) => instance.clone(),
+                        x => {
+                            if std_mode {
+                                runtime_error!(self, "Only instances have properties.");
+                            } else {
+                                runtime_error!(
+                                    self,
+                                    "Tried to get property '{}' of non-instance `{}`.",
+                                    *field,
+                                    x
+                                );
+                            }
+                            return InterpretResult::RuntimeError;
+                        }
+                    };
+                    if let Some(value) = instance.fields.get(&field) {
+                        self.stack.pop(); // instance
+                        self.stack_push(*value);
+                    } else {
+                        runtime_error!(self, "Undefined property '{}'.", *field);
+                        return InterpretResult::RuntimeError;
+                    }
+                }
+                OpCode::SetProperty => {
+                    let field = match &**self.read_constant(false) {
+                        Value::String(string_id) => string_id.clone(),
+                        x => {
+                            panic!("Non-string property name to SET_PROPERTY: `{}`", x);
+                        }
+                    };
+                    match &**self.peek(1).expect("Stack underflow in SET_PROPERTY") {
+                        Value::Instance(instance) => instance,
+                        x => {
+                            if std_mode {
+                                runtime_error!(self, "Only instances have fields.");
+                            } else {
+                                runtime_error!(
+                                    self,
+                                    "Tried to set property '{}' of non-instance `{}`.",
+                                    *field,
+                                    x
+                                );
+                            }
+                            return InterpretResult::RuntimeError;
+                        }
+                    };
+                    let value = self.stack.pop().expect("Stack underflow in SET_PROPERTY");
+                    let mut instance = self.stack.pop().expect("Stack underflow in SET_PROPERTY");
+                    instance.as_instance_mut().fields.insert(field, value);
+                    self.stack_push(value);
+                }
             };
+        }
+    }
+
+    fn peek(&self, n: usize) -> Option<&ValueId> {
+        if n >= self.stack.len() {
+            None
+        } else {
+            Some(&self.stack[self.stack.len() - n - 1])
+        }
+    }
+
+    fn peek_mut(&mut self, n: usize) -> Option<&mut ValueId> {
+        let len = self.stack.len();
+        if n >= len {
+            None
+        } else {
+            Some(&mut self.stack[len - n - 1])
         }
     }
 
@@ -405,7 +482,7 @@ impl VM {
     }
 
     fn negate(&mut self) -> Option<InterpretResult> {
-        let value = &mut **self.stack.last_mut().expect("stack underflow in OP_NEGATE");
+        let value = &mut **self.peek_mut(0).expect("stack underflow in OP_NEGATE");
         match value {
             Value::Number(n) => *n = -*n,
             _ => {
@@ -526,7 +603,7 @@ impl VM {
         } else {
             usize::from(self.read_byte("Internal error: missing operand for OP_SET_LOCAL"))
         };
-        *self.stack_get_mut(slot) = *self.stack.last().expect("stack underflow in OP_SET_LOCAL");
+        *self.stack_get_mut(slot) = *self.peek(0).expect("stack underflow in OP_SET_LOCAL");
     }
 
     fn get_local(&mut self, op: OpCode) {
