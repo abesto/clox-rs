@@ -289,8 +289,7 @@ impl Arena {
             Value::Class(c) => self.gray_strings.push(c.name.id),
             Value::Instance(instance) => {
                 self.gray_values.push(instance.class.id);
-                for (field, value) in instance.fields.iter() {
-                    self.gray_strings.push(field.id);
+                for value in instance.fields.values() {
                     self.gray_values.push(value.id);
                 }
             }

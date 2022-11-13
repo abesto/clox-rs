@@ -359,7 +359,7 @@ impl VM {
                             return InterpretResult::RuntimeError;
                         }
                     };
-                    if let Some(value) = instance.fields.get(&field) {
+                    if let Some(value) = instance.fields.get(self.arena.get_string(&field)) {
                         self.stack.pop(); // instance
                         self.stack_push(*value);
                     } else if !std_mode {
@@ -371,12 +371,13 @@ impl VM {
                     }
                 }
                 OpCode::SetProperty => {
-                    let field = match &**self.read_constant(false) {
+                    let field_string_id = match &**self.read_constant(false) {
                         Value::String(string_id) => string_id.clone(),
                         x => {
                             panic!("Non-string property name to SET_PROPERTY: `{}`", x);
                         }
                     };
+                    let field = self.arena.get_string(&field_string_id).clone();
                     match &**self.peek(1).expect("Stack underflow in SET_PROPERTY") {
                         Value::Instance(instance) => instance,
                         x => {
@@ -386,7 +387,7 @@ impl VM {
                                 runtime_error!(
                                     self,
                                     "Tried to set property '{}' of non-instance `{}`.",
-                                    *field,
+                                    field,
                                     x
                                 );
                             }
@@ -733,15 +734,16 @@ impl VM {
                     false
                 } else {
                     let start_index = self.stack.len() - usize::from(arg_count);
-                    let args = self.stack[start_index..]
-                        .iter()
-                        .map(|v| (**v).clone())
-                        .collect::<Vec<_>>();
-                    match fun(&args) {
+                    let args = self.stack[start_index..].iter().collect::<Vec<_>>();
+                    match fun(&mut self.arena, &args) {
                         Ok(value) => {
                             self.stack
                                 .truncate(self.stack.len() - usize::from(arg_count) - 1);
-                            self.stack_push_value(value);
+                            self.stack_push(if let Some(value) = value {
+                                value
+                            } else {
+                                self.builtin_constants.nil
+                            });
                             true
                         }
                         Err(e) => {

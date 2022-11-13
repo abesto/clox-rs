@@ -1,0 +1,5 @@
+class Foo {}
+var foo = Foo();
+var field = 23;
+
+setattr(foo, field, 20); // expect runtime error: `setattr` can only index with string indexes, got: `23` (instance: `<Foo instance>`)

@@ -2,7 +2,7 @@ use derivative::Derivative;
 use hashbrown::HashMap;
 
 use crate::{
-    arena::{FunctionId, StringId, ValueId},
+    arena::{Arena, FunctionId, StringId, ValueId},
     chunk::Chunk,
     config,
 };
@@ -232,7 +232,7 @@ pub struct NativeFunction {
     pub fun: NativeFunctionImpl,
 }
 
-pub type NativeFunctionImpl = fn(&[Value]) -> Result<Value, String>;
+pub type NativeFunctionImpl = fn(&mut Arena, &[&ValueId]) -> Result<Option<ValueId>, String>;
 
 fn always_equals<T>(_: &T, _: &T) -> bool {
     true
@@ -255,7 +255,7 @@ impl Class {
 pub struct Instance {
     pub class: ValueId,
     #[derivative(PartialOrd = "ignore")]
-    pub fields: HashMap<StringId, ValueId>,
+    pub fields: HashMap<String, ValueId>,
 }
 
 impl Instance {

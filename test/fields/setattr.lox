@@ -1,0 +1,14 @@
+class Foo {}
+var foo = Foo();
+var field = "bar";
+
+print foo.bar; // expect: nil
+setattr(foo, field, 42);
+print getattr(foo, field); // expect: 42
+
+var x = "b";
+x = x + "ar";
+setattr(foo, field, 20);
+print getattr(foo, x); // expect: 20
+print foo.bar; // expect: 20
+

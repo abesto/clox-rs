@@ -1,4 +1,8 @@
 class Foo {}
 var foo = Foo();
-foo.bar = "bar value"; 
-//print foo.bar; // expect: bar value
+var field = "bar";
+
+print getattr(foo, field);
+foo.bar = "42";
+print getattr(foo, field);
+

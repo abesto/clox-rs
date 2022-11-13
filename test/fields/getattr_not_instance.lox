@@ -1,0 +1,3 @@
+var obj = "whee";
+var field = "whoo";
+print getattr(obj, field); // expect runtime error: `getattr` only works on instances, got `whee`
