@@ -1,4 +1,7 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    ops::{Deref, DerefMut},
+    pin::Pin,
+};
 
 use derivative::Derivative;
 use hashbrown::HashMap;
@@ -189,7 +192,35 @@ impl<V: ArenaValue> std::ops::IndexMut<usize> for Arena<V> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct BuiltinConstants {
+    pub nil: ValueId,
+    pub true_: ValueId,
+    pub false_: ValueId,
+}
+
+impl BuiltinConstants {
+    #[must_use]
+    pub fn new(heap: &mut Heap) -> Self {
+        Self {
+            nil: heap.values.add(Value::Nil),
+            true_: heap.values.add(Value::Bool(true)),
+            false_: heap.values.add(Value::Bool(false)),
+        }
+    }
+
+    pub fn bool(&self, val: bool) -> ValueId {
+        if val {
+            self.true_
+        } else {
+            self.false_
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct Heap {
+    builtin_constants: Option<BuiltinConstants>,
+
     pub strings: Arena<String>,
     pub values: Arena<Value>,
     pub functions: Arena<Function>,
@@ -199,16 +230,29 @@ pub struct Heap {
 }
 
 impl Heap {
-    pub fn new() -> Self {
+    pub fn new() -> Pin<Box<Self>> {
         let log_gc = crate::config::LOG_GC.load();
-        Self {
+
+        let mut heap = Box::pin(Self {
+            builtin_constants: None,
+
             strings: Arena::new("String", log_gc),
             values: Arena::new("Value", log_gc),
             functions: Arena::new("Function", log_gc),
 
             log_gc,
             next_gc: 1024 * 1024,
-        }
+        });
+
+        // Very important: first pin, *then* initialize the constants, as the `ArenaId`s generated
+        // here will carry a raw pointer that needs to remain valid
+        heap.builtin_constants = Some(BuiltinConstants::new(&mut heap));
+
+        heap
+    }
+
+    pub fn builtin_constants(&self) -> &BuiltinConstants {
+        &self.builtin_constants.as_ref().unwrap()
     }
 
     fn bytes_allocated(&self) -> usize {
@@ -219,10 +263,14 @@ impl Heap {
         self.bytes_allocated() > self.next_gc
     }
 
-    pub fn gc_start(&self) {
+    pub fn gc_start(&mut self) {
         if self.log_gc {
             eprintln!("-- gc begin");
         }
+
+        self.values.mark(&self.builtin_constants().nil.clone());
+        self.values.mark(&self.builtin_constants().true_.clone());
+        self.values.mark(&self.builtin_constants().false_.clone());
     }
 
     pub fn trace(&mut self) {

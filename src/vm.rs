@@ -61,34 +61,8 @@ impl CallFrame {
     }
 }
 
-struct BuiltinConstants {
-    pub nil: ValueId,
-    pub true_: ValueId,
-    pub false_: ValueId,
-}
-
-impl BuiltinConstants {
-    #[must_use]
-    pub fn new(heap: &mut Heap) -> Self {
-        Self {
-            nil: heap.values.add(Value::Nil),
-            true_: heap.values.add(Value::Bool(true)),
-            false_: heap.values.add(Value::Bool(false)),
-        }
-    }
-
-    pub fn bool(&self, val: bool) -> ValueId {
-        if val {
-            self.true_
-        } else {
-            self.false_
-        }
-    }
-}
-
 pub struct VM {
     heap: Pin<Box<Heap>>,
-    builtin_constants: BuiltinConstants,
     frames: Vec<CallFrame>,
     stack: Vec<ValueId>,
     globals: HashMap<StringId, Global>,
@@ -98,10 +72,8 @@ pub struct VM {
 impl VM {
     #[must_use]
     pub fn new() -> Self {
-        let mut heap = Pin::new(Box::new(Heap::new()));
         Self {
-            builtin_constants: BuiltinConstants::new(&mut heap),
-            heap,
+            heap: Heap::new(),
             frames: Vec::with_capacity(crate::config::FRAMES_MAX),
             stack: Vec::with_capacity(crate::config::STACK_MAX),
             globals: HashMap::new(),
@@ -256,9 +228,9 @@ impl VM {
                     let closure_id = self.heap.values.add(Value::from(closure));
                     self.stack_push(closure_id);
                 }
-                OpCode::Nil => self.stack_push(self.builtin_constants.nil),
-                OpCode::True => self.stack_push(self.builtin_constants.true_),
-                OpCode::False => self.stack_push(self.builtin_constants.false_),
+                OpCode::Nil => self.stack_push(self.heap.builtin_constants().nil),
+                OpCode::True => self.stack_push(self.heap.builtin_constants().true_),
+                OpCode::False => self.stack_push(self.heap.builtin_constants().false_),
 
                 OpCode::Negate => {
                     if let Some(value) = self.negate() {
@@ -364,7 +336,7 @@ impl VM {
                         self.stack_push(*value);
                     } else if !std_mode {
                         self.stack.pop(); // instance
-                        self.stack_push(self.builtin_constants.nil);
+                        self.stack_push(self.heap.builtin_constants().nil);
                     } else {
                         runtime_error!(self, "Undefined property '{}'.", *field);
                         return InterpretResult::RuntimeError;
@@ -476,7 +448,7 @@ impl VM {
                 .stack
                 .pop()
                 .expect("stack underflow in OP_EQUAL (second)");
-        self.stack_push(self.builtin_constants.bool(value));
+        self.stack_push(self.heap.builtin_constants().bool(value));
     }
 
     fn not_(&mut self) {
@@ -485,7 +457,7 @@ impl VM {
             .pop()
             .expect("stack underflow in OP_NOT")
             .is_falsey();
-        self.stack_push(self.builtin_constants.bool(value));
+        self.stack_push(self.heap.builtin_constants().bool(value));
     }
 
     fn negate(&mut self) -> Option<InterpretResult> {
@@ -745,7 +717,7 @@ impl VM {
                             self.stack_push(if let Some(value) = value {
                                 value
                             } else {
-                                self.builtin_constants.nil
+                                self.heap.builtin_constants().nil
                             });
                             true
                         }
@@ -894,9 +866,6 @@ impl VM {
         for upvalue in &self.open_upvalues {
             self.heap.values.mark(upvalue);
         }
-        self.heap.values.mark(&self.builtin_constants.nil);
-        self.heap.values.mark(&self.builtin_constants.false_);
-        self.heap.values.mark(&self.builtin_constants.true_);
 
         // Trace references
         self.heap.trace();
