@@ -714,11 +714,7 @@ impl VM {
                         Ok(value) => {
                             self.stack
                                 .truncate(self.stack.len() - usize::from(arg_count) - 1);
-                            self.stack_push(if let Some(value) = value {
-                                value
-                            } else {
-                                self.heap.builtin_constants().nil
-                            });
+                            self.stack_push(value);
                             true
                         }
                         Err(e) => {

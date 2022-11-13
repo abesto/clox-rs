@@ -232,7 +232,7 @@ pub struct NativeFunction {
     pub fun: NativeFunctionImpl,
 }
 
-pub type NativeFunctionImpl = fn(&mut Heap, &[&ValueId]) -> Result<Option<ValueId>, String>;
+pub type NativeFunctionImpl = fn(&mut Heap, &[&ValueId]) -> Result<ValueId, String>;
 
 fn always_equals<T>(_: &T, _: &T) -> bool {
     true

@@ -9,29 +9,29 @@ use crate::{
     vm::VM,
 };
 
-fn clock_native(heap: &mut Heap, _args: &[&ValueId]) -> Result<Option<ValueId>, String> {
-    Ok(Some(
-        heap.values.add(Value::Number(
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs_f64(),
-        )),
-    ))
+fn clock_native(heap: &mut Heap, _args: &[&ValueId]) -> Result<ValueId, String> {
+    Ok(heap.values.add(Value::Number(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64(),
+    )))
 }
 
-fn sqrt_native(heap: &mut Heap, args: &[&ValueId]) -> Result<Option<ValueId>, String> {
+fn sqrt_native(heap: &mut Heap, args: &[&ValueId]) -> Result<ValueId, String> {
     match &**args[0] {
-        Value::Number(n) => Ok(Some(heap.values.add(n.sqrt().into()))),
+        Value::Number(n) => Ok(heap.values.add(n.sqrt().into())),
         x => Err(format!("'sqrt' expected numeric argument, got: {}", *x)),
     }
 }
 
-fn getattr_native(heap: &mut Heap, args: &[&ValueId]) -> Result<Option<ValueId>, String> {
+fn getattr_native(heap: &mut Heap, args: &[&ValueId]) -> Result<ValueId, String> {
     match (&heap.values[args[0]], &heap.values[args[1]]) {
-        (Value::Instance(instance), Value::String(string_id)) => {
-            Ok(instance.fields.get(&heap.strings[string_id]).cloned())
-        }
+        (Value::Instance(instance), Value::String(string_id)) => Ok(instance
+            .fields
+            .get(&heap.strings[string_id])
+            .cloned()
+            .unwrap_or(heap.builtin_constants().nil)),
         (instance @ Value::Instance(_), x) => Err(format!(
             "`getattr` can only index with string indexes, got: `{}` (instance: `{}`)",
             x, instance
@@ -43,12 +43,12 @@ fn getattr_native(heap: &mut Heap, args: &[&ValueId]) -> Result<Option<ValueId>,
     }
 }
 
-fn setattr_native(heap: &mut Heap, args: &[&ValueId]) -> Result<Option<ValueId>, String> {
+fn setattr_native(heap: &mut Heap, args: &[&ValueId]) -> Result<ValueId, String> {
     if let Value::String(string_id) = &heap.values[args[1]] {
         let field = heap.strings[string_id].clone();
         if let Value::Instance(instance) = &mut heap.values[args[0]] {
             instance.fields.insert(field, *args[2]);
-            Ok(None)
+            Ok(heap.builtin_constants().nil)
         } else {
             Err(format!(
                 "`setattr` only works on instances, got `{}`",
