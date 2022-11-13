@@ -19,7 +19,7 @@ fn clock_native(heap: &mut Heap, _args: &[&ValueId]) -> Result<ValueId, String> 
 }
 
 fn sqrt_native(heap: &mut Heap, args: &[&ValueId]) -> Result<ValueId, String> {
-    match &**args[0] {
+    match &heap.values[args[0]] {
         Value::Number(n) => Ok(heap.values.add(n.sqrt().into())),
         x => Err(format!("'sqrt' expected numeric argument, got: {}", *x)),
     }
@@ -68,7 +68,7 @@ fn delattr_native(heap: &mut Heap, args: &[&ValueId]) -> Result<ValueId, String>
         } else {
             Err(format!(
                 "`delattr` only works on instances, got `{}`",
-                **args[0]
+                heap.values[args[0]]
             ))
         }
     } else {
