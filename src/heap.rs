@@ -1,6 +1,7 @@
 use std::{
     ops::{Deref, DerefMut},
     pin::Pin,
+    ptr::NonNull,
 };
 
 use derivative::Derivative;
@@ -17,7 +18,7 @@ impl<T> ArenaValue for T where T: Debug + Display + PartialEq {}
 pub struct ArenaId<T: ArenaValue> {
     id: usize,
     #[derivative(Hash = "ignore")]
-    arena: *mut Arena<T>, // Yes this is terrible, yes I'm OK with it for this project
+    arena: NonNull<Arena<T>>, // Yes this is terrible, yes I'm OK with it for this project
 }
 
 impl<T: ArenaValue + Clone> Copy for ArenaId<T> {}
@@ -26,19 +27,19 @@ impl<T: ArenaValue> Deref for ArenaId<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { &self.arena.as_ref().unwrap()[self] }
+        unsafe { &self.arena.as_ref()[self] }
     }
 }
 
 impl<T: ArenaValue> DerefMut for ArenaId<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut self.arena.as_mut().unwrap()[self as &Self] }
+        unsafe { &mut self.arena.as_mut()[self as &Self] }
     }
 }
 
 impl<T: ArenaValue> ArenaId<T> {
     pub fn marked(&self) -> bool {
-        unsafe { self.arena.as_ref().unwrap().is_marked(self.id) }
+        unsafe { self.arena.as_ref().is_marked(self.id) }
     }
 }
 
@@ -105,7 +106,7 @@ impl<V: ArenaValue> Arena<V> {
 
         ArenaId {
             id,
-            arena: &mut *self,
+            arena: (&mut *self).into(),
         }
     }
 
@@ -122,7 +123,7 @@ impl<V: ArenaValue> Arena<V> {
     }
 
     pub fn mark(&mut self, index: &ArenaId<V>) -> bool {
-        debug_assert_eq!(index.arena.cast_const(), self);
+        debug_assert_eq!(index.arena.as_ptr().cast_const(), self);
         self.mark_raw(index.id)
     }
 
@@ -165,7 +166,7 @@ impl<V: ArenaValue> std::ops::Index<&ArenaId<V>> for Arena<V> {
     type Output = V;
 
     fn index(&self, index: &ArenaId<V>) -> &Self::Output {
-        debug_assert_eq!(index.arena.cast_const(), self);
+        debug_assert_eq!(index.arena.as_ptr().cast_const(), self);
         &self[index.id]
     }
 }
@@ -180,7 +181,7 @@ impl<V: ArenaValue> std::ops::Index<usize> for Arena<V> {
 
 impl<V: ArenaValue> std::ops::IndexMut<&ArenaId<V>> for Arena<V> {
     fn index_mut(&mut self, index: &ArenaId<V>) -> &mut Self::Output {
-        debug_assert_eq!(index.arena.cast_const(), self);
+        debug_assert_eq!(index.arena.as_ptr().cast_const(), self);
         &mut self[index.id]
     }
 }
