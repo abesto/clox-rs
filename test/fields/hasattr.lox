@@ -1,0 +1,10 @@
+class C {}
+var x = C();
+var field = "foo";
+
+print hasattr(x, "foo"); // expect: false
+print hasattr(x, field); // expect: false
+
+x.foo = 20;
+print hasattr(x, "foo"); // expect: true
+print hasattr(x, field); // expect: true

@@ -1,0 +1,17 @@
+class Foo {}
+var foo = Foo();
+var field = "bar";
+
+foo.bar = "42";
+print foo.bar; // expect: 42
+print hasattr(foo, "bar"); // expect: true
+
+delattr(foo, "bar");
+print foo.bar; // expect: nil
+print hasattr(foo, "bar"); // expect: false
+
+foo.bar = "42";
+delattr(foo, field);
+print foo.bar; // expect: nil
+print hasattr(foo, "bar"); // expect: false
+
