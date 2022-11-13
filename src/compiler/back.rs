@@ -5,7 +5,7 @@ use crate::{
 
 use super::Compiler;
 
-impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
+impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
     pub(super) fn emit_byte<T>(&mut self, byte: T)
     where
         T: Into<u8>,
@@ -38,7 +38,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         T: Into<Value>,
     {
         let line = self.line();
-        let value_id = self.arena.add_value(value.into());
+        let value_id = self.heap.values.add(value.into());
         if !self.current_chunk().write_constant(value_id, line) {
             self.error("Too many constants in one chunk.");
         }

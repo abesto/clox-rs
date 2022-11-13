@@ -4,8 +4,8 @@ use paste::paste;
 use shrinkwraprs::Shrinkwrap;
 
 use crate::{
-    arena::{StringId, ValueId},
     config,
+    heap::{StringId, ValueId},
     types::Line,
 };
 
@@ -105,7 +105,7 @@ impl OpCode {
     }
 }
 
-#[derive(PartialEq, Eq, Derivative, Clone)]
+#[derive(PartialEq, Derivative, Clone)]
 #[derivative(PartialOrd)]
 pub struct Chunk {
     name: StringId,

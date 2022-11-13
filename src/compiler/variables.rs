@@ -1,15 +1,15 @@
 use hashbrown::hash_map::Entry;
 
 use crate::{
-    arena::StringId,
     chunk::{ConstantLongIndex, OpCode},
     config,
+    heap::StringId,
 };
 
 use super::{Compiler, Local, ScopeDepth, Upvalue};
 use crate::scanner::{Token, TokenKind as TK};
 
-impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
+impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
     pub(super) fn begin_scope(&mut self) {
         **self.scope_depth_mut() += 1;
     }
@@ -99,7 +99,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         S: ToString,
     {
         match self.strings_by_name.entry(s.to_string()) {
-            Entry::Vacant(entry) => *entry.insert(self.arena.add_string(s.to_string())),
+            Entry::Vacant(entry) => *entry.insert(self.heap.strings.add(s.to_string())),
             Entry::Occupied(entry) => *entry.get(),
         }
     }
@@ -113,7 +113,7 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         if let Some(index) = self.globals_by_name().get(&string_id) {
             *index
         } else {
-            let value_id = self.arena.add_value(string_id.into());
+            let value_id = self.heap.values.add(string_id.into());
             let index = self.current_chunk().make_constant(value_id);
             self.globals_by_name_mut().insert(string_id, index);
             index

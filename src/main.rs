@@ -6,11 +6,11 @@ use vm::InterpretResult;
 
 use crate::vm::VM;
 
-mod arena;
 mod bitwise;
 mod chunk;
 mod compiler;
 mod config;
+mod heap;
 mod native_functions;
 mod scanner;
 mod types;

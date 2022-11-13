@@ -2,9 +2,9 @@ use derivative::Derivative;
 use hashbrown::HashMap;
 
 use crate::{
-    arena::{Arena, FunctionId, StringId, ValueId},
     chunk::Chunk,
     config,
+    heap::{FunctionId, Heap, StringId, ValueId},
 };
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
@@ -25,7 +25,7 @@ pub enum Value {
     Instance(Instance),
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum Upvalue {
     Open(usize),
     Closed(ValueId),
@@ -40,7 +40,7 @@ impl Upvalue {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub struct Closure {
     pub function: FunctionId,
     pub upvalues: Vec<ValueId>,
@@ -191,7 +191,7 @@ impl Value {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub struct Function {
     pub arity: usize,
     pub chunk: Chunk,
@@ -232,7 +232,7 @@ pub struct NativeFunction {
     pub fun: NativeFunctionImpl,
 }
 
-pub type NativeFunctionImpl = fn(&mut Arena, &[&ValueId]) -> Result<Option<ValueId>, String>;
+pub type NativeFunctionImpl = fn(&mut Heap, &[&ValueId]) -> Result<Option<ValueId>, String>;
 
 fn always_equals<T>(_: &T, _: &T) -> bool {
     true

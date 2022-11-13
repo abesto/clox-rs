@@ -15,10 +15,16 @@ cargo-test:
 craftinginterpreters-test: $(DEBUG_BIN)
 	$(eval home := $(shell pwd))
 	cd $(CRAFTING_INTERPRETERS) && \
-		dart tool/bin/test.dart $(test_level) --interpreter $(home)/$(DEBUG_BIN) --arguments --std --arguments --stress-gc
-	cd $(CRAFTING_INTERPRETERS) && \
 		dart tool/bin/test.dart $(test_level) --interpreter $(home)/$(DEBUG_BIN) --arguments --std
 
+.PHONY: craftinginterpreters-test-stress-gc
+craftinginterpreters-test-stress-gc: $(DEBUG_BIN)
+	$(eval home := $(shell pwd))
+	cd $(CRAFTING_INTERPRETERS) && \
+		dart tool/bin/test.dart $(test_level) --interpreter $(home)/$(DEBUG_BIN) --arguments --std --arguments --stress-gc
+
+.PHONY: craftinginterpreters-test-both
+craftinginterpreters-test-both: craftinginterpreters-test craftinginterpreters-test-stress-gc
 
 .PHONY: custom-dart-test
 custom-dart-test: $(DEBUG_BIN)
