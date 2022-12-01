@@ -1,5 +1,16 @@
-class Person {
-  sayName() {
-    print name;
+class Brunch {
+  eggs() {}
+}
+
+var brunch = Brunch();
+var eggs = brunch.eggs;
+print eggs;
+
+class Scone {
+  topping(first, second) {
+    print "scone with " + first + " and " + second;
   }
 }
+
+var scone = Scone();
+scone.topping("berries", "cream");

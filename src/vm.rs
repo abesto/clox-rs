@@ -339,6 +339,8 @@ impl VM {
                     if let Some(value) = instance.fields.get(&self.heap.strings[&field]) {
                         self.stack.pop(); // instance
                         self.stack_push(*value);
+                    } else if self.bind_method(instance.class, field) {
+                        // nothing to do here, bind_method has side effects
                     } else if !std_mode {
                         self.stack.pop(); // instance
                         self.stack_push(self.heap.builtin_constants().nil);
@@ -767,11 +769,24 @@ impl VM {
                 self.stack[stack_index] = instance_id;
                 true
             }
+            Value::BoundMethod(bound_method) => self.execute_call(bound_method.method, arg_count),
             _ => {
                 runtime_error!(self, "Can only call functions and classes.");
                 false
             }
         }
+    }
+
+    fn bind_method(&mut self, class: ValueId, name: StringId) -> bool {
+        let class = class.as_class();
+        let Some(method) = class.methods.get(&name) else { return false; };
+        let bound_method = Value::bound_method(
+            *self.peek(0).expect("Buffer underflow in OP_METHOD"),
+            *method,
+        );
+        self.stack.pop();
+        self.stack_push_value(bound_method);
+        true
     }
 
     fn capture_upvalue(&mut self, local: usize) -> ValueId {

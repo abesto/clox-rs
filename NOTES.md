@@ -28,6 +28,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * The book stores closed `Upvalue`s with some neat pointer trickery. We can't follow there; instead, `Upvalue` is now an enum with an `Open(usize)` and a `Closed(ValueId)` variant.
 * The book makes GC decisions (at least of the stress-testing kind) whenever memory is allocated. Our direct translation would be the `Arena::add_*` methods, but lifetimes make injecting roots there tricky. Instead in `clox-rs` GC is (potentially) triggered between the execution of each instruction.
 * The initial `Arena` implementation used `Vec`s as the backing store. This falls apart at GC: the "smart pointers" (e.g. `ValueId`) carry around an index into the `Vec`, but GC compresses the `Vec`, and so all smart pointers become invalid. There's probably a smart and efficient way around this. Instead of figuring that out, I switched the backing store to a `HashMap`, plus a storage for free ids (i.e. ones that have been removed before and can now be reused).
+* Printing of some values like instances and bound methods when NOT running with `--std` is more similar to Python than to Lox (more informative).
 
 # TODO
 

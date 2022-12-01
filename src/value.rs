@@ -23,6 +23,7 @@ pub enum Value {
 
     Class(Class),
     Instance(Instance),
+    BoundMethod(BoundMethod),
 }
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
@@ -66,6 +67,10 @@ impl Value {
             upvalues: Vec::with_capacity(upvalue_count),
             upvalue_count,
         })
+    }
+
+    pub fn bound_method(receiver: ValueId, method: ValueId) -> Value {
+        Value::BoundMethod(BoundMethod { receiver, method })
     }
 }
 
@@ -139,6 +144,18 @@ impl std::fmt::Display for Value {
                 "<{} instance>",
                 *(*instance.class).as_class().name
             )),
+            Value::BoundMethod(method) => {
+                if config::STD_MODE.load() {
+                    f.pad(&format!("{}", *method.method))
+                } else {
+                    f.pad(&format!(
+                        "<bound method {}.{} of {}>",
+                        *method.receiver.as_instance().class.as_class().name,
+                        *method.method.as_closure().function.name,
+                        *method.receiver
+                    ))
+                }
+            }
         }
     }
 }
@@ -173,6 +190,13 @@ impl Value {
         match self {
             Value::Class(c) => c,
             _ => unreachable!("Expected Class, found `{}`", self),
+        }
+    }
+
+    pub fn as_instance(&self) -> &Instance {
+        match self {
+            Value::Instance(i) => i,
+            _ => unreachable!("Expected Instance, found `{}`", self),
         }
     }
 
@@ -279,4 +303,10 @@ impl Instance {
             fields: HashMap::new(),
         }
     }
+}
+
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
+pub struct BoundMethod {
+    pub receiver: ValueId,
+    pub method: ValueId,
 }

@@ -337,6 +337,12 @@ impl Heap {
                 self.values.gray.append(&mut fields);
                 self.values.gray.push(class_id);
             }
+            Value::BoundMethod(bound_method) => {
+                let receiver_id = bound_method.receiver.id;
+                let method_id = bound_method.method.id;
+                self.values.gray.push(receiver_id);
+                self.values.gray.push(method_id);
+            }
         }
     }
 
