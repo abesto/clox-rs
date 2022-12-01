@@ -89,6 +89,7 @@ pub enum OpCode {
     Class,
     GetProperty,
     SetProperty,
+    Method,
 }
 
 impl OpCode {
@@ -227,7 +228,7 @@ impl<'chunk> InstructionDisassembler<'chunk> {
                 | Greater | Less | Print | Pop | Dup | CloseUpvalue => 0,
                 Constant | GetLocal | SetLocal | GetGlobal | SetGlobal | DefineGlobal
                 | DefineGlobalConst | Return | Call | GetUpvalue | SetUpvalue | Class
-                | GetProperty | SetProperty => 1,
+                | GetProperty | SetProperty | Method => 1,
                 JumpIfFalse | Jump | Loop => 2,
                 ConstantLong
                 | GetGlobalLong
@@ -430,6 +431,7 @@ impl<'chunk> std::fmt::Debug for InstructionDisassembler<'chunk> {
                 SetLocal,
                 GetProperty,
                 SetProperty,
+                Method,
             ),
             constant_long(
                 ConstantLong,

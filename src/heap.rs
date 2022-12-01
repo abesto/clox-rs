@@ -319,7 +319,18 @@ impl Heap {
                     .append(&mut closure.upvalues.iter().map(|uv| uv.id).collect());
             }
             Value::Upvalue(Upvalue::Closed(value_id)) => self.values.gray.push(value_id.id),
-            Value::Class(c) => self.strings.gray.push(c.name.id),
+            Value::Class(c) => {
+                self.strings.gray.push(c.name.id);
+                let method_ids = c
+                    .methods
+                    .iter()
+                    .map(|(n, c)| (n.id, c.id))
+                    .collect::<Vec<_>>();
+                for (method_name, closure) in method_ids {
+                    self.strings.gray.push(method_name);
+                    self.values.gray.push(closure);
+                }
+            }
             Value::Instance(instance) => {
                 let mut fields = instance.fields.values().map(|value| value.id).collect();
                 let class_id = instance.class.id;

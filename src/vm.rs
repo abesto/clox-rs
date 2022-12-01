@@ -382,6 +382,17 @@ impl VM {
                         .insert(field.to_string(), value);
                     self.stack_push(value);
                 }
+
+                OpCode::Method => {
+                    let constant = *self.read_constant(false);
+                    let method_name = match &self.heap.values[&constant] {
+                        Value::String(string_id) => *string_id,
+                        x => {
+                            panic!("Non-string method name to OP_METHOD: `{}`", x);
+                        }
+                    };
+                    self.define_method(method_name);
+                }
             };
         }
     }
@@ -391,6 +402,15 @@ impl VM {
             None
         } else {
             Some(&self.stack[self.stack.len() - n - 1])
+        }
+    }
+
+    fn peek_mut(&mut self, n: usize) -> Option<&mut ValueId> {
+        if n >= self.stack.len() {
+            None
+        } else {
+            let len = self.stack.len();
+            Some(&mut self.stack[len - n - 1])
         }
     }
 
@@ -508,6 +528,16 @@ impl VM {
                 x
             ),
         }
+    }
+
+    fn define_method(&mut self, method_name: StringId) {
+        let method = *self.peek(0).expect("Stack underflow in OP_METHOD");
+        let class = self
+            .peek_mut(1)
+            .expect("Stack underflow in OP_METHOD")
+            .as_class_mut();
+        class.methods.insert(method_name, method);
+        self.stack.pop();
     }
 
     fn return_(&mut self) -> Option<InterpretResult> {

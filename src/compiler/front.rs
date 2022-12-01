@@ -111,10 +111,22 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
         }
     }
 
-    fn class_declaration(&mut self) {
-        self.consume(TK::Identifier, "Expect class name.");
+    fn method(&mut self) {
+        self.consume(TK::Identifier, "Expect method name.");
         let name_constant =
             self.identifier_constant(self.previous.as_ref().unwrap().as_str().to_string());
+        self.function(FunctionType::Function);
+        self.emit_bytes(
+            OpCode::Method,
+            ConstantIndex::try_from(name_constant)
+                .expect("Too many constants when declaring method."),
+        );
+    }
+
+    fn class_declaration(&mut self) {
+        self.consume(TK::Identifier, "Expect class name.");
+        let class_name = self.previous.as_ref().unwrap().as_str().to_string();
+        let name_constant = self.identifier_constant(class_name.to_string());
         self.declare_variable(false);
 
         self.emit_bytes(
@@ -124,8 +136,13 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
         );
         self.define_variable(Some(name_constant), false);
 
+        self.named_variable(class_name, false);
         self.consume(TK::LeftBrace, "Expect '{' before class body.");
+        while !self.check(TK::RightBrace) && !self.check(TK::Eof) {
+            self.method();
+        }
         self.consume(TK::RightBrace, "Expect '}' after class body.");
+        self.emit_byte(OpCode::Pop);
     }
 
     fn fun_declaration(&mut self) {

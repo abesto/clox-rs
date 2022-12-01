@@ -169,6 +169,13 @@ impl Value {
         }
     }
 
+    pub fn as_class_mut(&mut self) -> &mut Class {
+        match self {
+            Value::Class(c) => c,
+            _ => unreachable!("Expected Class, found `{}`", self),
+        }
+    }
+
     pub fn as_instance_mut(&mut self) -> &mut Instance {
         match self {
             Value::Instance(i) => i,
@@ -238,15 +245,21 @@ fn always_equals<T>(_: &T, _: &T) -> bool {
     true
 }
 
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, PartialEq, Clone, Derivative)]
+#[derivative(PartialOrd)]
 pub struct Class {
     pub name: StringId,
+    #[derivative(PartialOrd = "ignore")]
+    pub methods: HashMap<StringId, ValueId>,
 }
 
 impl Class {
     #[must_use]
     pub fn new(name: StringId) -> Self {
-        Class { name }
+        Class {
+            name,
+            methods: HashMap::new(),
+        }
     }
 }
 
