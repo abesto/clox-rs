@@ -255,11 +255,10 @@ impl<'chunk> InstructionDisassembler<'chunk> {
         offset: &CodeOffset,
     ) -> std::fmt::Result {
         let constant_index = ConstantIndex(self.chunk.code()[offset.as_ref() + 1]);
+        write!(f, "{:-16} {:>4}", name, *constant_index,)?;
         writeln!(
             f,
-            "{:-16} {:>4} '{}'",
-            name,
-            *constant_index,
+            " '{}'",
             **self.chunk.get_constant(*constant_index.as_ref())
         )
     }
@@ -427,8 +426,6 @@ impl<'chunk> std::fmt::Debug for InstructionDisassembler<'chunk> {
                 DefineGlobalConst,
                 GetGlobal,
                 SetGlobal,
-                GetLocal,
-                SetLocal,
                 GetProperty,
                 SetProperty,
                 Method,
@@ -441,7 +438,7 @@ impl<'chunk> std::fmt::Debug for InstructionDisassembler<'chunk> {
                 SetGlobalLong,
             ),
             closure(Closure),
-            byte(Call, GetUpvalue, SetUpvalue, Class),
+            byte(Call, GetUpvalue, SetUpvalue, GetLocal, SetLocal, Class),
             byte_long(GetLocalLong, SetLocalLong),
             jump(Jump, JumpIfFalse, Loop),
             simple(
