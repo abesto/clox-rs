@@ -244,7 +244,7 @@ impl<'chunk> InstructionDisassembler<'chunk> {
         let code = self.chunk.code();
         let constant = code[closure_offset + 1];
         let value = &**self.chunk.get_constant(constant);
-        usize::from(value.as_function().upvalue_count) * 2
+        value.as_function().upvalue_count * 2
     }
 
     fn debug_constant_opcode(

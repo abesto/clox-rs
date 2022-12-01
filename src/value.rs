@@ -52,7 +52,7 @@ impl Closure {
         let upvalue_count = function.upvalue_count;
         Closure {
             function,
-            upvalues: Vec::with_capacity(usize::from(upvalue_count)),
+            upvalues: Vec::with_capacity(upvalue_count),
             upvalue_count,
         }
     }
@@ -63,7 +63,7 @@ impl Value {
         let upvalue_count = function.upvalue_count;
         Value::Closure(Closure {
             function,
-            upvalues: Vec::with_capacity(usize::from(upvalue_count)),
+            upvalues: Vec::with_capacity(upvalue_count),
             upvalue_count,
         })
     }
@@ -130,7 +130,7 @@ impl std::fmt::Display for Value {
             Value::Upvalue(_) => f.pad("upvalue"),
             Value::Class(c) => {
                 if config::STD_MODE.load() {
-                    f.pad(&*c.name)
+                    f.pad(&c.name)
                 } else {
                     f.pad(&format!("<class {}>", *c.name))
                 }
@@ -164,7 +164,7 @@ impl Value {
 
     pub fn as_class(&self) -> &Class {
         match self {
-            Value::Class(c) => &c,
+            Value::Class(c) => c,
             _ => unreachable!("Expected Class, found `{}`", self),
         }
     }

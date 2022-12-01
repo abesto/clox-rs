@@ -38,8 +38,8 @@ impl<T: ArenaValue> DerefMut for ArenaId<T> {
 }
 
 impl<T: ArenaValue> ArenaId<T> {
-    pub fn marked(&self) -> bool {
-        unsafe { self.arena.as_ref().is_marked(self.id) }
+    pub fn marked(&self, black_value: bool) -> bool {
+        unsafe { self.arena.as_ref().is_marked(self.id, black_value) }
     }
 }
 
@@ -110,8 +110,8 @@ impl<V: ArenaValue> Arena<V> {
         }
     }
 
-    fn is_marked(&self, index: usize) -> bool {
-        self.data[&index].marked
+    fn is_marked(&self, index: usize, black_value: bool) -> bool {
+        self.data[&index].marked == black_value
     }
 
     fn set_marked(&mut self, index: usize, marked: bool) {
@@ -122,34 +122,33 @@ impl<V: ArenaValue> Arena<V> {
         std::mem::take(&mut self.gray)
     }
 
-    pub fn mark(&mut self, index: &ArenaId<V>) -> bool {
+    pub fn mark(&mut self, index: &ArenaId<V>, black_value: bool) -> bool {
         debug_assert_eq!(index.arena.as_ptr().cast_const(), self);
-        self.mark_raw(index.id)
+        self.mark_raw(index.id, black_value)
     }
 
-    fn mark_raw(&mut self, index: usize) -> bool {
-        if self.is_marked(index) {
+    fn mark_raw(&mut self, index: usize, black_value: bool) -> bool {
+        if self.is_marked(index, black_value) {
             return false;
         }
         if self.log_gc {
             eprintln!("{}/{} mark {}", self.name, index, self[index]);
         }
-        self.set_marked(index, true);
+        self.set_marked(index, black_value);
         self.gray.push(index);
         true
     }
 
-    fn sweep(&mut self) {
+    fn sweep(&mut self, black_value: bool) {
         let mut to_remove = vec![];
         for (key, value) in self.data.iter_mut() {
-            let retain = value.marked;
+            let retain = value.marked == black_value;
             if !retain && self.log_gc {
                 eprintln!("{}/{} free {}", self.name, key, value.item);
             }
             if !retain {
                 self.bytes_allocated -= std::mem::size_of::<V>();
             }
-            value.marked = false;
             if !retain {
                 to_remove.push(*key);
             }
@@ -228,6 +227,7 @@ pub struct Heap {
 
     log_gc: bool,
     next_gc: usize,
+    pub black_value: bool,
 }
 
 impl Heap {
@@ -243,6 +243,7 @@ impl Heap {
 
             log_gc,
             next_gc: 1024 * 1024,
+            black_value: true,
         });
 
         // Very important: first pin, *then* initialize the constants, as the `ArenaId`s generated
@@ -253,7 +254,7 @@ impl Heap {
     }
 
     pub fn builtin_constants(&self) -> &BuiltinConstants {
-        &self.builtin_constants.as_ref().unwrap()
+        self.builtin_constants.as_ref().unwrap()
     }
 
     fn bytes_allocated(&self) -> usize {
@@ -269,9 +270,12 @@ impl Heap {
             eprintln!("-- gc begin");
         }
 
-        self.values.mark(&self.builtin_constants().nil.clone());
-        self.values.mark(&self.builtin_constants().true_.clone());
-        self.values.mark(&self.builtin_constants().false_.clone());
+        self.values
+            .mark(&self.builtin_constants().nil.clone(), self.black_value);
+        self.values
+            .mark(&self.builtin_constants().true_.clone(), self.black_value);
+        self.values
+            .mark(&self.builtin_constants().false_.clone(), self.black_value);
     }
 
     pub fn trace(&mut self) {
@@ -299,7 +303,7 @@ impl Heap {
             eprintln!("Value/{} blacken {}", index, self.values[index]);
         }
 
-        self.values.mark_raw(index);
+        self.values.mark_raw(index, self.black_value);
         match &self.values[index] {
             Value::Bool(_)
             | Value::Nil
@@ -329,7 +333,7 @@ impl Heap {
         if self.log_gc {
             eprintln!("String/{} blacken {}", index, self.strings[index]);
         }
-        self.strings.mark_raw(index);
+        self.strings.mark_raw(index, self.black_value);
     }
 
     fn blacken_function(&mut self, index: usize) {
@@ -341,7 +345,7 @@ impl Heap {
         for constant in function.chunk.constants() {
             self.values.gray.push(constant.id);
         }
-        self.functions.mark_raw(index);
+        self.functions.mark_raw(index, self.black_value);
     }
 
     pub fn sweep(&mut self) {
@@ -350,9 +354,10 @@ impl Heap {
         }
 
         let before = self.bytes_allocated();
-        self.values.sweep();
-        self.functions.sweep();
-        self.strings.sweep();
+        self.values.sweep(self.black_value);
+        self.functions.sweep(self.black_value);
+        self.strings.sweep(self.black_value);
+        self.black_value = !self.black_value;
 
         self.next_gc = self.bytes_allocated() * crate::config::GC_HEAP_GROW_FACTOR;
         if self.log_gc {

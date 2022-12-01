@@ -168,13 +168,11 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
             // Challenge 25/2: alias loop variables
             if crate::config::STD_MODE.load() {
                 None
+            } else if let Ok(loop_var) = u8::try_from(self.locals().len() - 1) {
+                Some((loop_var, name))
             } else {
-                if let Ok(loop_var) = u8::try_from(self.locals().len() - 1) {
-                    Some((loop_var, name))
-                } else {
-                    self.error("Creating loop variable led to too many locals.");
-                    None
-                }
+                self.error("Creating loop variable led to too many locals.");
+                None
             }
         } else {
             self.expression_statement();

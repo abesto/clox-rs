@@ -197,7 +197,7 @@ impl VM {
                     let function = value.as_function();
                     let mut closure = Closure::new(*function);
 
-                    for _ in 0..usize::from(closure.upvalue_count) {
+                    for _ in 0..closure.upvalue_count {
                         let is_local = self.read_byte("Missing 'is_local' operand for OP_CLOSURE");
                         debug_assert!(
                             is_local == 0 || is_local == 1,
@@ -312,7 +312,7 @@ impl VM {
                 OpCode::GetProperty => {
                     let constant = *self.read_constant(false);
                     let field = match &self.heap.values[&constant] {
-                        Value::String(string_id) => string_id.clone(),
+                        Value::String(string_id) => *string_id,
                         x => {
                             panic!("Non-string property name to GET_PROPERTY: `{}`", x);
                         }
@@ -350,7 +350,7 @@ impl VM {
                 OpCode::SetProperty => {
                     let constant = *self.read_constant(false);
                     let field_string_id = match &self.heap.values[&constant] {
-                        Value::String(string_id) => string_id.clone(),
+                        Value::String(string_id) => *string_id,
                         x => {
                             panic!("Non-string property name to SET_PROPERTY: `{}`", x);
                         }
@@ -461,7 +461,7 @@ impl VM {
     }
 
     fn negate(&mut self) -> Option<InterpretResult> {
-        let value_id = self.peek(0).expect("stack underflow in OP_NEGATE").clone();
+        let value_id = *self.peek(0).expect("stack underflow in OP_NEGATE");
         let value = &mut self.heap.values[&value_id];
         match value {
             Value::Number(n) => *n = -*n,
@@ -852,21 +852,24 @@ impl VM {
         if !stress_gc && !self.heap.needs_gc() {
             return;
         }
+        let black_value = self.heap.black_value;
 
         self.heap.gc_start();
 
         // Mark roots
         for value in &self.stack {
-            self.heap.values.mark(value);
+            self.heap.values.mark(value, black_value);
         }
         for value in self.globals.values() {
-            self.heap.values.mark(&value.value);
+            self.heap.values.mark(&value.value, black_value);
         }
         for frame in &self.frames {
-            self.heap.functions.mark(&frame.closure().function);
+            self.heap
+                .functions
+                .mark(&frame.closure().function, black_value);
         }
         for upvalue in &self.open_upvalues {
-            self.heap.values.mark(upvalue);
+            self.heap.values.mark(upvalue, black_value);
         }
 
         // Trace references
@@ -876,7 +879,7 @@ impl VM {
         let globals_to_remove = self
             .globals
             .keys()
-            .filter(|string_id| !string_id.marked())
+            .filter(|string_id| !string_id.marked(black_value))
             .cloned()
             .collect::<Vec<_>>();
         for id in globals_to_remove {
