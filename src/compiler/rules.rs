@@ -105,7 +105,7 @@ pub(super) fn make_rules<'scanner, 'arena>() -> Rules<'scanner, 'arena> {
         Return       = [None,     None,   None],
         Switch       = [None,     None,   None],
         Super        = [None,     None,   None],
-        This         = [None,     None,   None],
+        This         = [this,     None,   None],
         True         = [literal,  None,   None],
         Var          = [None,     None,   None],
         While        = [None,     None,   None],
@@ -238,6 +238,14 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
             self.previous.as_ref().unwrap().as_str().to_string(),
             can_assign,
         );
+    }
+
+    fn this(&mut self, _can_assign: bool) {
+        if self.current_class().is_none() {
+            self.error("Can't use 'this' outside of a class.");
+            return;
+        }
+        self.variable(false);
     }
 
     fn and(&mut self, _can_assign: bool) {

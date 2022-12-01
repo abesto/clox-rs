@@ -31,6 +31,7 @@ struct Local<'scanner> {
 #[derive(Copy, Clone, PartialEq, Eq)]
 enum FunctionType {
     Function,
+    Method,
     Script,
 }
 
@@ -58,7 +59,17 @@ struct NestableState<'scanner> {
     loop_state: Option<LoopState>,
 }
 
+struct ClassState {}
+
+impl ClassState {
+    #[must_use]
+    fn new() -> Self {
+        Self {}
+    }
+}
+
 impl<'scanner> NestableState<'scanner> {
+    #[must_use]
     fn new(function_name: StringId, function_type: FunctionType) -> Self {
         NestableState {
             current_function: Function::new(0, function_name),
@@ -66,7 +77,11 @@ impl<'scanner> NestableState<'scanner> {
             locals: vec![Local {
                 name: Token {
                     kind: TokenKind::Identifier,
-                    lexeme: &[],
+                    lexeme: if function_type == FunctionType::Method {
+                        "this".as_bytes()
+                    } else {
+                        &[]
+                    },
                     line: Line(0),
                 },
                 depth: ScopeDepth(0),
@@ -95,6 +110,7 @@ pub struct Compiler<'scanner, 'heap> {
     panic_mode: bool,
 
     nestable_state: Vec<NestableState<'scanner>>,
+    class_state: Vec<ClassState>,
 }
 
 impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
@@ -111,6 +127,7 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
             panic_mode: false,
             rules: make_rules(),
             nestable_state: vec![NestableState::new(function_name, FunctionType::Script)],
+            class_state: vec![],
         }
     }
 
@@ -239,5 +256,9 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
         for (key, value) in names {
             self.strings_by_name.insert(key.clone(), *value);
         }
+    }
+
+    fn current_class(&self) -> Option<&ClassState> {
+        self.class_state.last()
     }
 }

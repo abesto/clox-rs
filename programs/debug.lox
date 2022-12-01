@@ -1,16 +1,9 @@
-class Brunch {
-  eggs() {}
-}
-
-var brunch = Brunch();
-var eggs = brunch.eggs;
-print eggs;
-
 class Scone {
   topping(first, second) {
-    print "scone with " + first + " and " + second;
+    print this.kind + " scone with " + first + " and " + second;
   }
 }
 
 var scone = Scone();
+scone.kind = "nice";
 scone.topping("berries", "cream");

@@ -769,7 +769,11 @@ impl VM {
                 self.stack[stack_index] = instance_id;
                 true
             }
-            Value::BoundMethod(bound_method) => self.execute_call(bound_method.method, arg_count),
+            Value::BoundMethod(bound_method) => {
+                let new_stack_base = self.stack.len() - usize::from(arg_count) - 1;
+                self.stack[new_stack_base] = bound_method.receiver;
+                self.execute_call(bound_method.method, arg_count)
+            }
             _ => {
                 runtime_error!(self, "Can only call functions and classes.");
                 false

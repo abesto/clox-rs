@@ -1,4 +1,4 @@
-use super::{rules::Precedence, Compiler, FunctionType, LoopState};
+use super::{rules::Precedence, ClassState, Compiler, FunctionType, LoopState};
 use crate::{
     chunk::{CodeOffset, ConstantIndex, OpCode},
     scanner::TokenKind as TK,
@@ -115,7 +115,7 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
         self.consume(TK::Identifier, "Expect method name.");
         let name_constant =
             self.identifier_constant(self.previous.as_ref().unwrap().as_str().to_string());
-        self.function(FunctionType::Function);
+        self.function(FunctionType::Method);
         self.emit_bytes(
             OpCode::Method,
             ConstantIndex::try_from(name_constant)
@@ -135,6 +135,7 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
                 .expect("Too many constants when declaring class."),
         );
         self.define_variable(Some(name_constant), false);
+        self.class_state.push(ClassState::new());
 
         self.named_variable(class_name, false);
         self.consume(TK::LeftBrace, "Expect '{' before class body.");
@@ -143,6 +144,7 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
         }
         self.consume(TK::RightBrace, "Expect '}' after class body.");
         self.emit_byte(OpCode::Pop);
+        self.class_state.pop();
     }
 
     fn fun_declaration(&mut self) {
