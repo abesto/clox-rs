@@ -31,6 +31,7 @@ struct Local<'scanner> {
 #[derive(Copy, Clone, PartialEq, Eq)]
 enum FunctionType {
     Function,
+    Initializer,
     Method,
     Script,
 }
@@ -77,7 +78,9 @@ impl<'scanner> NestableState<'scanner> {
             locals: vec![Local {
                 name: Token {
                     kind: TokenKind::Identifier,
-                    lexeme: if function_type == FunctionType::Method {
+                    lexeme: if function_type == FunctionType::Method
+                        || function_type == FunctionType::Initializer
+                    {
                         "this".as_bytes()
                     } else {
                         &[]
@@ -117,9 +120,14 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
     #[must_use]
     pub fn new(scanner: Scanner<'scanner>, heap: &'heap mut Heap) -> Self {
         let function_name = heap.strings.add(String::from("<script>"));
+
+        let mut strings_by_name: HashMap<String, StringId> = HashMap::new();
+        let init_string = heap.builtin_constants().init_string;
+        strings_by_name.insert(init_string.to_string(), init_string);
+
         Compiler {
             heap,
-            strings_by_name: HashMap::new(),
+            strings_by_name,
             scanner,
             previous: None,
             current: None,

@@ -196,6 +196,7 @@ pub struct BuiltinConstants {
     pub nil: ValueId,
     pub true_: ValueId,
     pub false_: ValueId,
+    pub init_string: StringId,
 }
 
 impl BuiltinConstants {
@@ -205,6 +206,7 @@ impl BuiltinConstants {
             nil: heap.values.add(Value::Nil),
             true_: heap.values.add(Value::Bool(true)),
             false_: heap.values.add(Value::Bool(false)),
+            init_string: heap.strings.add("init".to_string()),
         }
     }
 
@@ -276,6 +278,10 @@ impl Heap {
             .mark(&self.builtin_constants().true_.clone(), self.black_value);
         self.values
             .mark(&self.builtin_constants().false_.clone(), self.black_value);
+        self.strings.mark(
+            &self.builtin_constants().init_string.clone(),
+            self.black_value,
+        );
     }
 
     pub fn trace(&mut self) {

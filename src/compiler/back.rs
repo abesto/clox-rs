@@ -3,7 +3,7 @@ use crate::{
     value::Value,
 };
 
-use super::Compiler;
+use super::{Compiler, FunctionType};
 
 impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
     pub(super) fn emit_byte<T>(&mut self, byte: T)
@@ -29,7 +29,11 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
     }
 
     pub(super) fn emit_return(&mut self) {
-        self.emit_byte(OpCode::Nil);
+        if self.function_type() == FunctionType::Initializer {
+            self.emit_bytes(OpCode::GetLocal, 0);
+        } else {
+            self.emit_byte(OpCode::Nil);
+        }
         self.emit_byte(OpCode::Return);
     }
 

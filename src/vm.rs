@@ -762,12 +762,23 @@ impl VM {
                     }
                 }
             }
-            Value::Class(_) => {
+            Value::Class(class) => {
+                let maybe_initializer = class
+                    .methods
+                    .get(&self.heap.builtin_constants().init_string)
+                    .cloned();
                 let instance_id: ValueId = self.heap.values.add(Instance::new(callee).into());
                 // Replace the class with the instance on the stack
                 let stack_index = self.stack_base() + 1;
                 self.stack[stack_index] = instance_id;
-                true
+                if let Some(initializer) = maybe_initializer {
+                    self.execute_call(initializer, arg_count)
+                } else if arg_count != 0 {
+                    runtime_error!(self, "Expected 0 arguments but got {arg_count}.");
+                    false
+                } else {
+                    true
+                }
             }
             Value::BoundMethod(bound_method) => {
                 let new_stack_base = self.stack.len() - usize::from(arg_count) - 1;

@@ -115,7 +115,12 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
         self.consume(TK::Identifier, "Expect method name.");
         let name_constant =
             self.identifier_constant(self.previous.as_ref().unwrap().as_str().to_string());
-        self.function(FunctionType::Method);
+        let function_type = if self.previous.as_ref().unwrap().lexeme == "init".as_bytes() {
+            FunctionType::Initializer
+        } else {
+            FunctionType::Method
+        };
+        self.function(function_type);
         self.emit_bytes(
             OpCode::Method,
             ConstantIndex::try_from(name_constant)
@@ -431,6 +436,9 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
         if self.match_(TK::Semicolon) {
             self.emit_return();
         } else {
+            if self.function_type() == FunctionType::Initializer {
+                self.error("Can't return a value from an initializer.");
+            }
             self.expression();
             self.consume(TK::Semicolon, "Expect ';' after return value.");
             self.emit_byte(OpCode::Return);
