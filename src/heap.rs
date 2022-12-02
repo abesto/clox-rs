@@ -74,6 +74,7 @@ pub struct Arena<K: Key, V: ArenaValue> {
     log_gc: bool,
 
     data: SlotMap<K, Item<V>>,
+    bytes_allocated: usize,
 
     gray: Vec<K>,
 }
@@ -85,12 +86,14 @@ impl<K: Key, V: ArenaValue> Arena<K, V> {
             name,
             log_gc,
             data: SlotMap::with_key(),
+            bytes_allocated: 0,
             gray: Vec::new(),
         }
     }
 
     pub fn add(&mut self, value: V) -> ArenaId<K, V> {
         let id = self.data.insert(value.into());
+        self.bytes_allocated += std::mem::size_of::<V>();
 
         if self.log_gc {
             eprintln!(
@@ -146,10 +149,11 @@ impl<K: Key, V: ArenaValue> Arena<K, V> {
             }
             retain
         });
+        self.bytes_allocated = std::mem::size_of::<V>() * self.data.len();
     }
 
     fn bytes_allocated(&self) -> usize {
-        std::mem::size_of::<V>() * self.data.len()
+        self.bytes_allocated
     }
 }
 
