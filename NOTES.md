@@ -112,3 +112,5 @@ Summary
   * Switching the heap to use `HopSlotMap` instead of `HashMap` for data storage gives a significant speed-up, now "only" 11.31 ± 0.44 times slower than `clox`.
   * Further benchmarking and optimizations got it down to 8.38 ± 0.47 times slower than `clox`.
     * The main change was caching the current function / closure in `VM` instead of looking it up from the last call frame on each `read_byte()` call.
+  * Interestingly, using specialized key types with `slotmap::new_key_type` further increased performance, now to 6.78 ± 0.42 times slower than `clox`.
+  * Replacing `slotmap::HopSlotMap` with any of the other `SlotMap` flavors, or `slab::Slab`, or `generational_arena::Arena` significantly decreased performance in this benchmark.

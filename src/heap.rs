@@ -5,7 +5,7 @@ use std::{
 };
 
 use derivative::Derivative;
-use slotmap::{DefaultKey, HopSlotMap as SlotMap};
+use slotmap::{new_key_type, HopSlotMap as SlotMap, Key};
 use std::fmt::{Debug, Display};
 
 use crate::value::{Function, Upvalue, Value};
@@ -13,17 +13,23 @@ use crate::value::{Function, Upvalue, Value};
 pub trait ArenaValue: Debug + Display + PartialEq {}
 impl<T> ArenaValue for T where T: Debug + Display + PartialEq {}
 
-#[derive(Clone, Debug, PartialOrd, Derivative)]
-#[derivative(Hash, PartialEq, Eq)]
-pub struct ArenaId<T: ArenaValue> {
-    id: DefaultKey,
-    #[derivative(Hash = "ignore")]
-    arena: NonNull<Arena<T>>, // Yes this is terrible, yes I'm OK with it for this project
+new_key_type! {
+    pub struct ValueKey;
+    pub struct FunctionKey;
+    pub struct StringKey;
 }
 
-impl<T: ArenaValue + Clone> Copy for ArenaId<T> {}
+#[derive(Clone, Debug, PartialOrd, Derivative)]
+#[derivative(Hash, PartialEq, Eq)]
+pub struct ArenaId<K: Key, T: ArenaValue> {
+    id: K,
+    #[derivative(Hash = "ignore")]
+    arena: NonNull<Arena<K, T>>, // Yes this is terrible, yes I'm OK with it for this project
+}
 
-impl<T: ArenaValue> Deref for ArenaId<T> {
+impl<K: Key, T: ArenaValue + Clone> Copy for ArenaId<K, T> {}
+
+impl<K: Key, T: ArenaValue> Deref for ArenaId<K, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -31,13 +37,13 @@ impl<T: ArenaValue> Deref for ArenaId<T> {
     }
 }
 
-impl<T: ArenaValue> DerefMut for ArenaId<T> {
+impl<K: Key, T: ArenaValue> DerefMut for ArenaId<K, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut self.arena.as_mut()[self as &Self] }
     }
 }
 
-impl<T: ArenaValue> ArenaId<T> {
+impl<K: Key, T: ArenaValue> ArenaId<K, T> {
     pub fn marked(&self, black_value: bool) -> bool {
         unsafe { self.arena.as_ref().is_marked(self.id, black_value) }
     }
@@ -58,32 +64,32 @@ impl<T> From<T> for Item<T> {
     }
 }
 
-pub type ValueId = ArenaId<Value>;
-pub type StringId = ArenaId<String>;
-pub type FunctionId = ArenaId<Function>;
+pub type ValueId = ArenaId<ValueKey, Value>;
+pub type StringId = ArenaId<StringKey, String>;
+pub type FunctionId = ArenaId<FunctionKey, Function>;
 
 #[derive(Clone, Debug)]
-pub struct Arena<V: ArenaValue> {
+pub struct Arena<K: Key, V: ArenaValue> {
     name: &'static str,
     log_gc: bool,
 
-    data: SlotMap<DefaultKey, Item<V>>,
+    data: SlotMap<K, Item<V>>,
 
-    gray: Vec<DefaultKey>,
+    gray: Vec<K>,
 }
 
-impl<V: ArenaValue> Arena<V> {
+impl<K: Key, V: ArenaValue> Arena<K, V> {
     #[must_use]
     fn new(name: &'static str, log_gc: bool) -> Self {
         Self {
             name,
             log_gc,
-            data: SlotMap::new(),
+            data: SlotMap::with_key(),
             gray: Vec::new(),
         }
     }
 
-    pub fn add(&mut self, value: V) -> ArenaId<V> {
+    pub fn add(&mut self, value: V) -> ArenaId<K, V> {
         let id = self.data.insert(value.into());
 
         if self.log_gc {
@@ -102,25 +108,25 @@ impl<V: ArenaValue> Arena<V> {
         }
     }
 
-    fn is_marked(&self, index: DefaultKey, black_value: bool) -> bool {
+    fn is_marked(&self, index: K, black_value: bool) -> bool {
         self.data[index].marked == black_value
     }
 
-    fn set_marked(&mut self, index: DefaultKey, marked: bool) {
+    fn set_marked(&mut self, index: K, marked: bool) {
         self.data[index].marked = marked;
     }
 
-    fn flush_gray(&mut self) -> Vec<DefaultKey> {
+    fn flush_gray(&mut self) -> Vec<K> {
         let capacity = self.gray.capacity();
         std::mem::replace(&mut self.gray, Vec::with_capacity(capacity))
     }
 
-    pub fn mark(&mut self, index: &ArenaId<V>, black_value: bool) -> bool {
+    pub fn mark(&mut self, index: &ArenaId<K, V>, black_value: bool) -> bool {
         debug_assert_eq!(index.arena.as_ptr().cast_const(), self);
         self.mark_raw(index.id, black_value)
     }
 
-    fn mark_raw(&mut self, index: DefaultKey, black_value: bool) -> bool {
+    fn mark_raw(&mut self, index: K, black_value: bool) -> bool {
         if self.is_marked(index, black_value) {
             return false;
         }
@@ -147,32 +153,32 @@ impl<V: ArenaValue> Arena<V> {
     }
 }
 
-impl<V: ArenaValue> std::ops::Index<&ArenaId<V>> for Arena<V> {
+impl<K: Key, V: ArenaValue> std::ops::Index<&ArenaId<K, V>> for Arena<K, V> {
     type Output = V;
 
-    fn index(&self, index: &ArenaId<V>) -> &Self::Output {
+    fn index(&self, index: &ArenaId<K, V>) -> &Self::Output {
         debug_assert_eq!(index.arena.as_ptr().cast_const(), self);
         &self[index.id]
     }
 }
 
-impl<V: ArenaValue> std::ops::Index<DefaultKey> for Arena<V> {
+impl<K: Key, V: ArenaValue> std::ops::Index<K> for Arena<K, V> {
     type Output = V;
 
-    fn index(&self, index: DefaultKey) -> &Self::Output {
+    fn index(&self, index: K) -> &Self::Output {
         &self.data[index].item
     }
 }
 
-impl<V: ArenaValue> std::ops::IndexMut<&ArenaId<V>> for Arena<V> {
-    fn index_mut(&mut self, index: &ArenaId<V>) -> &mut Self::Output {
+impl<K: Key, V: ArenaValue> std::ops::IndexMut<&ArenaId<K, V>> for Arena<K, V> {
+    fn index_mut(&mut self, index: &ArenaId<K, V>) -> &mut Self::Output {
         debug_assert_eq!(index.arena.as_ptr().cast_const(), self);
         &mut self[index.id]
     }
 }
 
-impl<V: ArenaValue> std::ops::IndexMut<DefaultKey> for Arena<V> {
-    fn index_mut(&mut self, index: DefaultKey) -> &mut Self::Output {
+impl<K: Key, V: ArenaValue> std::ops::IndexMut<K> for Arena<K, V> {
+    fn index_mut(&mut self, index: K) -> &mut Self::Output {
         &mut self.data[index].item
     }
 }
@@ -209,9 +215,9 @@ impl BuiltinConstants {
 pub struct Heap {
     builtin_constants: Option<BuiltinConstants>,
 
-    pub strings: Arena<String>,
-    pub values: Arena<Value>,
-    pub functions: Arena<Function>,
+    pub strings: Arena<StringKey, String>,
+    pub values: Arena<ValueKey, Value>,
+    pub functions: Arena<FunctionKey, Function>,
 
     log_gc: bool,
     next_gc: usize,
@@ -292,7 +298,7 @@ impl Heap {
         }
     }
 
-    fn blacken_value(&mut self, index: DefaultKey) {
+    fn blacken_value(&mut self, index: ValueKey) {
         if self.log_gc {
             eprintln!("Value/{:?} blacken {}", index, self.values[index]);
         }
@@ -340,14 +346,14 @@ impl Heap {
         }
     }
 
-    fn blacken_string(&mut self, index: DefaultKey) {
+    fn blacken_string(&mut self, index: StringKey) {
         if self.log_gc {
             eprintln!("String/{:?} blacken {}", index, self.strings[index]);
         }
         self.strings.mark_raw(index, self.black_value);
     }
 
-    fn blacken_function(&mut self, index: DefaultKey) {
+    fn blacken_function(&mut self, index: FunctionKey) {
         if self.log_gc {
             eprintln!("Function/{:?} blacken {}", index, self.functions[index]);
         }
