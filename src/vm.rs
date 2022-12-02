@@ -4,7 +4,7 @@ use std::pin::Pin;
 use hashbrown::HashMap;
 
 use crate::chunk::InstructionDisassembler;
-use crate::heap::ValueId;
+use crate::heap::{ValueId, FunctionId};
 use crate::native_functions::NativeFunctions;
 use crate::value::{Class, Closure, Instance, Upvalue};
 use crate::{
@@ -27,7 +27,7 @@ pub enum InterpretResult {
 macro_rules! runtime_error {
     ($self:ident, $($arg:expr),* $(,)?) => {
         eprintln!($($arg),*);
-        for frame in $self.frames.iter().rev() {
+        for frame in $self.callstack.iter().rev() {
             let line = frame.closure().function.chunk.get_line(&CodeOffset(frame.ip - 1));
             eprintln!("[line {}] in {}", *line, *frame.closure().function.name);
         }
@@ -61,9 +61,75 @@ impl CallFrame {
     }
 }
 
+struct CallStack {
+    frames: Vec<CallFrame>,
+    current_closure: Option<ValueId>,
+    current_function: Option<FunctionId>
+}
+
+impl CallStack {
+    #[must_use]
+    fn new() -> Self {
+        Self {
+            frames: Vec::with_capacity(crate::config::FRAMES_MAX),
+            current_closure: None,
+            current_function: None
+        }
+    }
+
+    fn iter(&self) -> std::slice::Iter<CallFrame> {
+        self.frames.iter()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.frames.is_empty()
+    }
+
+    fn pop(&mut self) -> Option<CallFrame> {
+        let retval = self.frames.pop();
+        self.current_closure = self.frames.last().map(|f| f.closure);
+        self.current_function = self.current_closure.map(|c| c.as_closure().function);
+        retval
+    }
+
+    fn push(&mut self, closure: ValueId, stack_base: usize) {
+        self.frames.push(CallFrame {
+            closure, ip: 0, stack_base
+        });
+        self.current_closure = Some(closure);
+        self.current_function = Some(closure.as_closure().function);
+    }
+
+    fn current_mut(&mut self) -> &mut CallFrame {
+        let i = self.frames.len() - 1;
+        &mut self.frames[i]
+    }
+
+    fn current(&self) -> &CallFrame {
+        let i = self.frames.len() - 1;
+        &self.frames[i]
+    }
+
+    fn code_byte(&self, index: usize) -> u8 {
+        self.current_function.unwrap().chunk.code()[index]
+    }
+
+    fn closure(&self) -> ValueId {
+        self.current_closure.unwrap()
+    }
+
+    fn function(&self) -> FunctionId {
+        self.current_function.unwrap()
+    }
+
+    fn len(&self) -> usize {
+        self.frames.len()
+    }
+}
+
 pub struct VM {
     heap: Pin<Box<Heap>>,
-    frames: Vec<CallFrame>,
+    callstack: CallStack,
     stack: Vec<ValueId>,
     globals: HashMap<StringId, Global>,
     open_upvalues: VecDeque<ValueId>,
@@ -74,7 +140,7 @@ impl VM {
     pub fn new() -> Self {
         Self {
             heap: Heap::new(),
-            frames: Vec::with_capacity(crate::config::FRAMES_MAX),
+            callstack: CallStack::new(),
             stack: Vec::with_capacity(crate::config::STACK_MAX),
             globals: HashMap::new(),
             open_upvalues: VecDeque::new(),
@@ -114,9 +180,9 @@ impl VM {
         let std_mode = config::STD_MODE.load();
         loop {
             if trace_execution {
-                let function = &self.frame().closure().function;
+                let function = &self.callstack.function();
                 let mut disassembler = InstructionDisassembler::new(&function.chunk);
-                *disassembler.offset = self.frame().ip;
+                *disassembler.offset = self.callstack.current().ip;
                 println!(
                     "          [ {} ]",
                     self.stack
@@ -128,7 +194,7 @@ impl VM {
                 print!("{:?}", disassembler);
             }
             self.collect_garbage(stress_gc);
-            match OpCode::try_from(self.read_byte("instruction"))
+            match OpCode::try_from(self.read_byte())
                 .expect("Internal error: unrecognized opcode")
             {
                 OpCode::Print => {
@@ -166,13 +232,13 @@ impl VM {
                 }
                 OpCode::Jump => {
                     let offset =
-                        self.read_16bit_number("Internal error: missing operand for OP_JUMP");
-                    self.frame_mut().ip += offset;
+                        self.read_16bit_number();
+                    self.callstack.current_mut().ip += offset;
                 }
                 OpCode::Loop => {
                     let offset =
-                        self.read_16bit_number("Internal error: missing operand for OP_LOOP");
-                    self.frame_mut().ip -= offset;
+                        self.read_16bit_number();
+                    self.callstack.current_mut().ip -= offset;
                 }
                 OpCode::Call => {
                     if let Some(value) = self.call() {
@@ -185,20 +251,20 @@ impl VM {
                     }
                 }
                 OpCode::Constant => {
-                    let value = *self.read_constant(false);
+                    let value = self.read_constant(false);
                     self.stack_push(value);
                 }
                 OpCode::ConstantLong => {
-                    let value = *self.read_constant(true);
+                    let value = self.read_constant(true);
                     self.stack_push(value);
                 }
                 OpCode::Closure => {
-                    let value = *self.read_constant(false);
+                    let value = self.read_constant(false);
                     let function = value.as_function();
                     let mut closure = Closure::new(*function);
 
                     for _ in 0..closure.upvalue_count {
-                        let is_local = self.read_byte("Missing 'is_local' operand for OP_CLOSURE");
+                        let is_local = self.read_byte();
                         debug_assert!(
                             is_local == 0 || is_local == 1,
                             "'is_local` must be 0 or 1, got {}",
@@ -207,13 +273,13 @@ impl VM {
                         let is_local = is_local == 1;
 
                         let index =
-                            usize::from(self.read_byte("Missing 'index' operand for OP_CLOSURE"));
+                            usize::from(self.read_byte());
                         if is_local {
                             closure.upvalues.push(self.capture_upvalue(index));
                         } else {
                             closure
                                 .upvalues
-                                .push((*self.frame().closure).as_closure().upvalues[index]);
+                                .push((*self.callstack.closure()).as_closure().upvalues[index]);
                         }
                     }
 
@@ -260,8 +326,10 @@ impl VM {
 
                 OpCode::GetUpvalue => {
                     let upvalue_index =
-                        usize::from(self.read_byte("Missing argument for OP_GET_UPVALUE"));
-                    let upvalue_location = self.frame().closure.as_closure().upvalues
+                        usize::from(self.read_byte());
+                    let closure_value = &*self.callstack.closure();
+                    let closure = closure_value.as_closure();
+                    let upvalue_location = closure.upvalues
                         [upvalue_index]
                         .upvalue_location();
                     match *upvalue_location {
@@ -273,8 +341,8 @@ impl VM {
                 }
                 OpCode::SetUpvalue => {
                     let upvalue_index =
-                        usize::from(self.read_byte("Missing argument for OP_SET_UPVALUE"));
-                    let upvalue_location = self.frame().closure.as_closure().upvalues
+                        usize::from(self.read_byte());
+                    let upvalue_location = (*self.callstack.closure()).as_closure().upvalues
                         [upvalue_index]
                         .upvalue_location()
                         // TODO get rid of this `.clone()`
@@ -300,7 +368,7 @@ impl VM {
                 }
 
                 OpCode::Class => {
-                    let constant = *self.read_constant(false);
+                    let constant = self.read_constant(false);
                     let class = match &self.heap.values[&constant] {
                         Value::String(string_id) => Class::new(*string_id),
                         x => {
@@ -310,7 +378,7 @@ impl VM {
                     self.stack_push_value(class.into());
                 }
                 OpCode::GetProperty => {
-                    let constant = *self.read_constant(false);
+                    let constant = self.read_constant(false);
                     let field = match &self.heap.values[&constant] {
                         Value::String(string_id) => *string_id,
                         x => {
@@ -350,7 +418,7 @@ impl VM {
                     }
                 }
                 OpCode::SetProperty => {
-                    let constant = *self.read_constant(false);
+                    let constant = self.read_constant(false);
                     let field_string_id = match &self.heap.values[&constant] {
                         Value::String(string_id) => *string_id,
                         x => {
@@ -386,7 +454,7 @@ impl VM {
                 }
 
                 OpCode::Method => {
-                    let constant = *self.read_constant(false);
+                    let constant = self.read_constant(false);
                     let method_name = match &self.heap.values[&constant] {
                         Value::String(string_id) => *string_id,
                         x => {
@@ -397,14 +465,14 @@ impl VM {
                 }
 
                 OpCode::Invoke => {
-                    let constant = *self.read_constant(false);
+                    let constant = self.read_constant(false);
                     let method_name = match &self.heap.values[&constant] {
                         Value::String(string_id) => *string_id,
                         x => {
                             panic!("Non-string method name to OP_INVOKE: `{}`", x);
                         }
                     };
-                    let arg_count = self.read_byte("Missing 'arg_count' argument for OP_INVOKE");
+                    let arg_count = self.read_byte();
                     if !self.invoke(method_name, arg_count) {
                         return InterpretResult::RuntimeError;
                     }
@@ -519,19 +587,19 @@ impl VM {
     }
 
     fn jump_if_false(&mut self) {
-        let offset = self.read_16bit_number("Internal error: missing operand for OP_JUMP_IF_FALSE");
+        let offset = self.read_16bit_number();
         if self
             .stack
             .last()
             .expect("stack underflow in OP_JUMP_IF_FALSE")
             .is_falsey()
         {
-            self.frame_mut().ip += offset;
+            self.callstack.current_mut().ip += offset;
         }
     }
 
     fn define_global(&mut self, op: OpCode) {
-        let constant = *self.read_constant(op == OpCode::DefineGlobalLong);
+        let constant = self.read_constant(op == OpCode::DefineGlobalLong);
         match &self.heap.values[&constant] {
             Value::String(name) => {
                 let name = *name;
@@ -568,10 +636,10 @@ impl VM {
     fn return_(&mut self) -> Option<InterpretResult> {
         let result = self.stack.pop();
         let frame = self
-            .frames
+            .callstack
             .pop()
             .expect("Call stack underflow in OP_RETURN");
-        if self.frames.is_empty() {
+        if self.callstack.is_empty() {
             self.stack.pop();
             return Some(InterpretResult::Ok);
         }
@@ -582,7 +650,7 @@ impl VM {
     }
 
     fn call(&mut self) -> Option<InterpretResult> {
-        let arg_count = self.read_byte("Internal error: missing operand for OP_CALL");
+        let arg_count = self.read_byte();
         let callee = self.stack[self.stack.len() - 1 - usize::from(arg_count)];
         if !self.call_value(callee, arg_count) {
             return Some(InterpretResult::RuntimeError);
@@ -592,7 +660,7 @@ impl VM {
 
     fn set_global(&mut self, op: OpCode) -> Option<InterpretResult> {
         let constant_index = self.read_constant_index(op == OpCode::SetGlobalLong);
-        let constant_value = *self.read_constant_value(constant_index);
+        let constant_value = self.read_constant_value(constant_index);
 
         let name = match &self.heap.values[&constant_value] {
             Value::String(name) => *name,
@@ -621,7 +689,7 @@ impl VM {
 
     fn get_global(&mut self, op: OpCode) -> Option<InterpretResult> {
         let constant_index = self.read_constant_index(op == OpCode::GetGlobalLong);
-        let constant_value = *self.read_constant_value(constant_index);
+        let constant_value = self.read_constant_value(constant_index);
         match &self.heap.values[&constant_value] {
             Value::String(name) => match self.globals.get(name) {
                 Some(global) => self.stack_push(global.value),
@@ -637,52 +705,52 @@ impl VM {
 
     fn set_local(&mut self, op: OpCode) {
         let slot = if op == OpCode::GetLocalLong {
-            self.read_24bit_number("Internal error: missing operand for OP_SET_LOCAL_LONG")
+            self.read_24bit_number()
         } else {
-            usize::from(self.read_byte("Internal error: missing operand for OP_SET_LOCAL"))
+            usize::from(self.read_byte())
         };
         *self.stack_get_mut(slot) = *self.peek(0).expect("stack underflow in OP_SET_LOCAL");
     }
 
     fn get_local(&mut self, op: OpCode) {
         let slot = if op == OpCode::GetLocalLong {
-            self.read_24bit_number("Internal error: missing operand for OP_GET_LOCAL_LONG")
+            self.read_24bit_number()
         } else {
-            usize::from(self.read_byte("Internal error: missing operand for OP_GET_LOCAL"))
+            usize::from(self.read_byte())
         };
         self.stack_push(*self.stack_get(slot));
     }
 
-    fn read_byte(&mut self, msg: &str) -> u8 {
-        let frame = self.frame_mut();
+    fn read_byte(&mut self) -> u8 {
+        let frame = self.callstack.current_mut();
+        let index = frame.ip;
         frame.ip += 1;
-        let index = frame.ip - 1;
-        *frame.closure().function.chunk.code().get(index).expect(msg)
+        self.callstack.code_byte(index)
     }
 
-    fn read_24bit_number(&mut self, msg: &str) -> usize {
-        (usize::from(self.read_byte(msg)) << 16)
-            + (usize::from(self.read_byte(msg)) << 8)
-            + (usize::from(self.read_byte(msg)))
+    fn read_24bit_number(&mut self) -> usize {
+        (usize::from(self.read_byte()) << 16)
+            + (usize::from(self.read_byte()) << 8)
+            + (usize::from(self.read_byte()))
     }
 
-    fn read_16bit_number(&mut self, msg: &str) -> usize {
-        (usize::from(self.read_byte(msg)) << 8) + (usize::from(self.read_byte(msg)))
+    fn read_16bit_number(&mut self) -> usize {
+        (usize::from(self.read_byte()) << 8) + (usize::from(self.read_byte()))
     }
 
     fn read_constant_index(&mut self, long: bool) -> usize {
         if long {
-            self.read_24bit_number("read_constant/long")
+            self.read_24bit_number()
         } else {
-            usize::from(self.read_byte("read_constant"))
+            usize::from(self.read_byte())
         }
     }
 
-    fn read_constant_value(&self, index: usize) -> &ValueId {
-        self.frame().closure().function.chunk.get_constant(index)
+    fn read_constant_value(&self, index: usize) -> ValueId {
+        *self.callstack.function().chunk.get_constant(index)
     }
 
-    fn read_constant(&mut self, long: bool) -> &ValueId {
+    fn read_constant(&mut self, long: bool) -> ValueId {
         let index = self.read_constant_index(long);
         self.read_constant_value(index)
     }
@@ -740,19 +808,8 @@ impl VM {
         &mut self.stack[offset + slot]
     }
 
-    fn frame(&self) -> &CallFrame {
-        self.frames
-            .last()
-            .expect("Out of execute_call frames, somehow?")
-    }
-
-    fn frame_mut(&mut self) -> &mut CallFrame {
-        let i = self.frames.len() - 1;
-        &mut self.frames[i]
-    }
-
     fn stack_base(&self) -> usize {
-        self.frame().stack_base
+        self.callstack.current().stack_base
     }
 
     fn call_value(&mut self, callee: ValueId, arg_count: u8) -> bool {
@@ -856,7 +913,7 @@ impl VM {
     }
 
     fn capture_upvalue(&mut self, local: usize) -> ValueId {
-        let local = self.frame().stack_base + local;
+        let local = self.callstack.current().stack_base + local;
         let mut upvalue_index = 0;
         let mut upvalue = None;
 
@@ -923,7 +980,7 @@ impl VM {
             return false;
         }
 
-        if self.frames.len() == crate::config::FRAMES_MAX {
+        if self.callstack.len() == crate::config::FRAMES_MAX {
             runtime_error!(self, "Stack overflow.");
             return false;
         }
@@ -934,11 +991,10 @@ impl VM {
             *closure
         );
 
-        self.frames.push(CallFrame {
+        self.callstack.push(
             closure,
-            ip: 0,
-            stack_base: self.stack.len() - arg_count - 1,
-        });
+            self.stack.len() - arg_count - 1,
+        );
         true
     }
 
@@ -974,7 +1030,7 @@ impl VM {
         for value in self.globals.values() {
             self.heap.values.mark(&value.value, black_value);
         }
-        for frame in &self.frames {
+        for frame in self.callstack.iter() {
             self.heap
                 .functions
                 .mark(&frame.closure().function, black_value);
