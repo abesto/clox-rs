@@ -189,6 +189,7 @@ pub struct BuiltinConstants {
     pub true_: ValueId,
     pub false_: ValueId,
     pub init_string: StringId,
+    pub numbers: Vec<ValueId>,
 }
 
 impl BuiltinConstants {
@@ -199,6 +200,9 @@ impl BuiltinConstants {
             true_: heap.values.add(Value::Bool(true)),
             false_: heap.values.add(Value::Bool(false)),
             init_string: heap.strings.add("init".to_string()),
+            numbers: (0..1024)
+                .map(|n| heap.values.add(Value::Number(n.into())))
+                .collect(),
         }
     }
 
@@ -207,6 +211,14 @@ impl BuiltinConstants {
             self.true_
         } else {
             self.false_
+        }
+    }
+
+    pub fn number(&self, n: f64) -> Option<ValueId> {
+        if n.fract() != 0.0 || n.is_nan() || n.is_infinite() {
+            None
+        } else {
+            self.numbers.get(n as usize).copied()
         }
     }
 }
@@ -276,6 +288,9 @@ impl Heap {
             &self.builtin_constants().init_string.clone(),
             self.black_value,
         );
+        for number in self.builtin_constants().numbers.clone() {
+            self.values.mark(&number, self.black_value);
+        }
     }
 
     pub fn trace(&mut self) {

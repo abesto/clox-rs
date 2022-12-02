@@ -116,3 +116,4 @@ Summary
     * The main change was caching the current function / closure in `VM` instead of looking it up from the last call frame on each `read_byte()` call.
   * Interestingly, using specialized key types with `slotmap::new_key_type` further increased performance, now to 6.78 ± 0.42 times slower than `clox`.
   * Replacing `slotmap::HopSlotMap` with any of the other `SlotMap` flavors, or `slab::Slab`, or `generational_arena::Arena` significantly decreased performance in this benchmark.
+  * Using built-in constants for `true`, `false`, `nil`, and integers 0-1024 gives us a further speedup to 4.74 ± 0.14 times slower than `clox`, since we save a ton of time not doing GC on these values. This is on par with the performance before GC. It's also cheating as this is an optimization technique not used in `clox`, but hey, cheating is technique.

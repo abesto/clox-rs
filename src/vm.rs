@@ -795,7 +795,12 @@ impl VM {
 
     #[inline]
     fn stack_push_value(&mut self, value: Value) {
-        let value_id = self.heap.values.add(value);
+        let value_id = match value {
+            Value::Bool(bool) => self.heap.builtin_constants().bool(bool),
+            Value::Nil => self.heap.builtin_constants().nil,
+            Value::Number(n) => self.heap.builtin_constants().number(n).unwrap_or_else(|| self.heap.values.add(value)),
+            value => self.heap.values.add(value)
+        };
         self.stack.push(value_id);
     }
 
