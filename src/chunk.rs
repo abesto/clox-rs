@@ -90,6 +90,7 @@ pub enum OpCode {
     GetProperty,
     SetProperty,
     Method,
+    Invoke,
 }
 
 impl OpCode {
@@ -229,7 +230,7 @@ impl<'chunk> InstructionDisassembler<'chunk> {
                 Constant | GetLocal | SetLocal | GetGlobal | SetGlobal | DefineGlobal
                 | DefineGlobalConst | Return | Call | GetUpvalue | SetUpvalue | Class
                 | GetProperty | SetProperty | Method => 1,
-                JumpIfFalse | Jump | Loop => 2,
+                JumpIfFalse | Jump | Loop | Invoke => 2,
                 ConstantLong
                 | GetGlobalLong
                 | SetGlobalLong
@@ -376,6 +377,22 @@ impl<'chunk> InstructionDisassembler<'chunk> {
 
         Ok(())
     }
+
+    fn debug_invoke_opcode(
+        &self,
+        f: &mut std::fmt::Formatter,
+        name: &str,
+        offset: &CodeOffset,
+    ) -> std::fmt::Result {
+        let code = self.chunk.code();
+        let constant = code[offset.as_ref() + 1];
+        let arg_count = code[offset.as_ref() + 2];
+        let constant_value = &**self.chunk.get_constant(constant);
+        writeln!(
+            f,
+            "{name:-16} ({arg_count} args) {constant:4} {constant_value}"
+        )
+    }
 }
 
 macro_rules! disassemble {
@@ -441,6 +458,7 @@ impl<'chunk> std::fmt::Debug for InstructionDisassembler<'chunk> {
             byte(Call, GetUpvalue, SetUpvalue, GetLocal, SetLocal, Class),
             byte_long(GetLocalLong, SetLocalLong),
             jump(Jump, JumpIfFalse, Loop),
+            invoke(Invoke),
             simple(
                 Nil,
                 True,

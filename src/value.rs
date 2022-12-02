@@ -41,11 +41,18 @@ impl Upvalue {
     }
 }
 
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, PartialOrd, Clone)]
 pub struct Closure {
     pub function: FunctionId,
     pub upvalues: Vec<ValueId>,
     pub upvalue_count: usize,
+}
+
+impl PartialEq for Closure {
+    fn eq(&self, _other: &Self) -> bool {
+        // Two different closures are always considered different, even if they close over exactly the same things
+        false
+    }
 }
 
 impl Closure {
@@ -140,10 +147,16 @@ impl std::fmt::Display for Value {
                     f.pad(&format!("<class {}>", *c.name))
                 }
             }
-            Value::Instance(instance) => f.pad(&format!(
-                "<{} instance>",
-                *(*instance.class).as_class().name
-            )),
+            Value::Instance(instance) => {
+                if config::STD_MODE.load() {
+                    f.pad(&format!("{} instance", *(*instance.class).as_class().name))
+                } else {
+                    f.pad(&format!(
+                        "<{} instance>",
+                        *(*instance.class).as_class().name
+                    ))
+                }
+            }
             Value::BoundMethod(method) => {
                 if config::STD_MODE.load() {
                     f.pad(&format!("{}", *method.method))
@@ -305,8 +318,15 @@ impl Instance {
     }
 }
 
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, PartialOrd, Clone)]
 pub struct BoundMethod {
     pub receiver: ValueId,
     pub method: ValueId,
+}
+
+impl PartialEq for BoundMethod {
+    fn eq(&self, _other: &Self) -> bool {
+        // Two different bound methods are always considered different
+        false
+    }
 }

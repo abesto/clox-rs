@@ -17,10 +17,11 @@ use crate::{
     value::Function,
 };
 
-#[derive(Shrinkwrap, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Default)]
+#[derive(Shrinkwrap, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Default, Debug)]
 #[shrinkwrap(mutable)]
 struct ScopeDepth(i32);
 
+#[derive(Debug)]
 struct Local<'scanner> {
     name: Token<'scanner>,
     depth: ScopeDepth,

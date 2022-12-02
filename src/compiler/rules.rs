@@ -198,12 +198,21 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         if can_assign && self.match_(TK::Equal) {
             self.expression();
             self.emit_byte(OpCode::SetProperty);
+            if !self.emit_number(name_constant.0, false) {
+                self.error("Too many constants created for OP_SET_PROPERTY.");
+            }
+        } else if self.match_(TK::LeftParen) {
+            let arg_count = self.argument_list();
+            self.emit_byte(OpCode::Invoke);
+            if !self.emit_number(name_constant.0, false) {
+                self.error("Too many constants created for OP_INVOKE.");
+            }
+            self.emit_byte(arg_count);
         } else {
             self.emit_byte(OpCode::GetProperty);
-        }
-
-        if !self.emit_number(name_constant.0, false) {
-            self.error("Too many constants created by property access.");
+            if !self.emit_number(name_constant.0, false) {
+                self.error("Too many constants created for OP_GET_PROPERTY.");
+            }
         }
     }
 

@@ -255,8 +255,7 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
     }
 
     pub(super) fn define_variable(&mut self, global: Option<ConstantLongIndex>, mutable: bool) {
-        if global.is_none() {
-            assert!(*self.scope_depth() > 0);
+        if *self.scope_depth() > 0 {
             self.mark_initialized();
             return;
         }

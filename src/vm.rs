@@ -118,12 +118,12 @@ impl VM {
                 let mut disassembler = InstructionDisassembler::new(&function.chunk);
                 *disassembler.offset = self.frame().ip;
                 println!(
-                    "          [{}]",
+                    "          [ {} ]",
                     self.stack
                         .iter()
                         .map(|v| format!("{}", self.heap.values[v]))
                         .collect::<Vec<_>>()
-                        .join(", ")
+                        .join(" ][ ")
                 );
                 print!("{:?}", disassembler);
             }
@@ -395,6 +395,20 @@ impl VM {
                     };
                     self.define_method(method_name);
                 }
+
+                OpCode::Invoke => {
+                    let constant = *self.read_constant(false);
+                    let method_name = match &self.heap.values[&constant] {
+                        Value::String(string_id) => *string_id,
+                        x => {
+                            panic!("Non-string method name to OP_INVOKE: `{}`", x);
+                        }
+                    };
+                    let arg_count = self.read_byte("Missing 'arg_count' argument for OP_INVOKE");
+                    if !self.invoke(method_name, arg_count) {
+                        return InterpretResult::RuntimeError;
+                    }
+                }
             };
         }
     }
@@ -462,14 +476,23 @@ impl VM {
     }
 
     fn equal(&mut self) {
-        let value = *self
+        let left_id = 
+        self
             .stack
             .pop()
-            .expect("stack underflow in OP_EQUAL (first)")
-            == *self
-                .stack
-                .pop()
-                .expect("stack underflow in OP_EQUAL (second)");
+            .expect("stack underflow in OP_EQUAL (first)");
+        let right_id = self
+            .stack
+            .pop()
+            .expect("stack underflow in OP_EQUAL (second)");
+        let left = &self.heap.values[&left_id];
+        let right = &self.heap.values[&right_id];
+        
+        // There's one case where equality-by-reference doesn't imply *actual* equality: NaN
+        let value = match (left, right) {
+            (Value::Number(left), Value::Number(right)) if left.is_nan() && right.is_nan() => false,
+            (left, right) => left_id == right_id || left == right
+        };
         self.stack_push(self.heap.builtin_constants().bool(value));
     }
 
@@ -733,6 +756,7 @@ impl VM {
     }
 
     fn call_value(&mut self, callee: ValueId, arg_count: u8) -> bool {
+        // eprintln!("call_value {}", *callee);
         match &self.heap.values[&callee] {
             Value::Closure(_) => self.execute_call(callee, arg_count),
             Value::NativeFunction(NativeFunction { fun, arity, name }) => {
@@ -769,7 +793,7 @@ impl VM {
                     .cloned();
                 let instance_id: ValueId = self.heap.values.add(Instance::new(callee).into());
                 // Replace the class with the instance on the stack
-                let stack_index = self.stack_base() + 1;
+                let stack_index = self.stack.len() - usize::from(arg_count) - 1;
                 self.stack[stack_index] = instance_id;
                 if let Some(initializer) = maybe_initializer {
                     self.execute_call(initializer, arg_count)
@@ -789,6 +813,33 @@ impl VM {
                 runtime_error!(self, "Can only call functions and classes.");
                 false
             }
+        }
+    }
+
+    fn invoke_from_class(&mut self, class: ValueId, method_name: StringId, arg_count: u8) -> bool {
+        let Some(method) = class.as_class().methods.get(&method_name) else { 
+            runtime_error!(self, "Undefined property '{}'.", self.heap.strings[&method_name]);
+            return false; 
+        };
+        self.execute_call(*method, arg_count)
+    }
+
+    fn invoke(&mut self, method_name: StringId, arg_count: u8) -> bool {
+        let receiver = self
+            .peek(arg_count.into())
+            .expect("Stack underflow in OP_INVOKE");
+        //eprintln!("invoke {}.{}", **receiver, *method_name);
+        if let Value::Instance(instance) = &self.heap.values[receiver] {
+            if let Some(value) = instance.fields.get(&self.heap.strings[&method_name]) {
+                let new_stack_base = self.stack.len() - usize::from(arg_count) - 1;
+                self.stack[new_stack_base] = *value;
+                self.call_value(*value, arg_count)
+            } else {
+                self.invoke_from_class(instance.class, method_name, arg_count)
+            }
+        } else {
+            runtime_error!(self, "Only instances have methods.");
+            false
         }
     }
 
