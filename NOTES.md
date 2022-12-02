@@ -97,6 +97,8 @@ Summary
     1.79 ± 0.02 times faster than '../jlox-rs/target/release/jlox_rs ./fib.lox'
 ```
 
+## Results
+
 * End of Chapter 24
   * vs [`jlox-rs`](https://github.com/abesto/jlox-rs): 1.79 ± 0.02 times faster 
   * vs `clox` proper: 8.14 ± 0.11 times slower
