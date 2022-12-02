@@ -97,7 +97,7 @@ Summary
     1.79 ± 0.02 times faster than '../jlox-rs/target/release/jlox_rs ./fib.lox'
 ```
 
-## Results
+## Results / Optimization Steps
 
 * End of Chapter 24
   * vs [`jlox-rs`](https://github.com/abesto/jlox-rs): 1.79 ± 0.02 times faster 
@@ -117,3 +117,4 @@ Summary
   * Interestingly, using specialized key types with `slotmap::new_key_type` further increased performance, now to 6.78 ± 0.42 times slower than `clox`.
   * Replacing `slotmap::HopSlotMap` with any of the other `SlotMap` flavors, or `slab::Slab`, or `generational_arena::Arena` significantly decreased performance in this benchmark.
   * Using built-in constants for `true`, `false`, `nil`, and integers 0-1024 gives us a further speedup to 4.74 ± 0.14 times slower than `clox`, since we save a ton of time not doing GC on these values. This is on par with the performance before GC. It's also cheating as this is an optimization technique not used in `clox`, but hey, cheating is technique.
+  * Switching from `hashbrown` to `rustc_hash` provides a small speedup, to now 4.15 ± 0.13 times slower than `clox`.

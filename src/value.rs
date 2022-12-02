@@ -1,5 +1,5 @@
 use derivative::Derivative;
-use hashbrown::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
     chunk::Chunk,
@@ -295,7 +295,7 @@ impl Class {
     pub fn new(name: StringId) -> Self {
         Class {
             name,
-            methods: HashMap::new(),
+            methods: HashMap::default(),
         }
     }
 }
@@ -313,7 +313,7 @@ impl Instance {
     pub fn new(class: ValueId) -> Self {
         Instance {
             class,
-            fields: HashMap::new(),
+            fields: HashMap::default(),
         }
     }
 }

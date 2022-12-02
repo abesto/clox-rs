@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::pin::Pin;
 
-use hashbrown::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::chunk::InstructionDisassembler;
 use crate::heap::{ValueId, FunctionId};
@@ -142,7 +142,7 @@ impl VM {
             heap: Heap::new(),
             callstack: CallStack::new(),
             stack: Vec::with_capacity(crate::config::STACK_MAX),
-            globals: HashMap::new(),
+            globals: HashMap::default(),
             open_upvalues: VecDeque::new(),
         }
     }

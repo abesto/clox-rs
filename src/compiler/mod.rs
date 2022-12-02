@@ -4,7 +4,7 @@ mod front;
 mod rules;
 mod variables;
 
-use hashbrown::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 use shrinkwraprs::Shrinkwrap;
 
 use crate::{
@@ -92,10 +92,10 @@ impl<'scanner> NestableState<'scanner> {
                 mutable: false,
                 is_captured: false,
             }],
-            upvalues: Default::default(),
-            globals_by_name: Default::default(),
-            scope_depth: Default::default(),
-            loop_state: Default::default(),
+            upvalues: Vec::new(),
+            globals_by_name: HashMap::default(),
+            scope_depth: ScopeDepth::default(),
+            loop_state: None,
         }
     }
 }
@@ -122,7 +122,7 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
     pub fn new(scanner: Scanner<'scanner>, heap: &'heap mut Heap) -> Self {
         let function_name = heap.strings.add(String::from("<script>"));
 
-        let mut strings_by_name: HashMap<String, StringId> = HashMap::new();
+        let mut strings_by_name: HashMap<String, StringId> = HashMap::default();
         let init_string = heap.builtin_constants().init_string;
         strings_by_name.insert(init_string.to_string(), init_string);
 
