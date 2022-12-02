@@ -109,3 +109,4 @@ Summary
 
 * End of Chapter 28
   * Performance is really starting to suffer now from the differences in `clox` and `clox-rs` memory management. We're down to being 18.28 ± 0.48 slower, with most of the time being spent in looking up heap values and in GC.
+  * Switching the heap to use `HopSlotMap` instead of `HashMap` for data storage gives a significant speed-up, now "only" 11.31 ± 0.44 times slower than `clox`.
