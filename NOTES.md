@@ -106,3 +106,6 @@ Summary
     * Two biggest offenders seems like `Value::clone` (called a lot when reading globals) and `core::ptr::drop_in_place` (executed a lot inside `VM::add` on `*stack_item = (stack_item.as_f64() + *b).into();` for some reason)
 * After switching memory management to an `Arena`: 4.59 ± 0.18 times slower than `clox`
   * Most of the (new) time is spent in `Vec::push` in `Arena::add_value`. CoW would probably help with this a lot.
+
+* End of Chapter 28
+  * Performance is really starting to suffer now from the differences in `clox` and `clox-rs` memory management. We're down to being 18.28 ± 0.48 slower, with most of the time being spent in looking up heap values and in GC.
