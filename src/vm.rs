@@ -1042,18 +1042,16 @@ impl VM {
 
         // Mark roots
         for value in &self.stack {
-            self.heap.values.mark(value, black_value);
+            self.heap.mark_value(value);
         }
-        for value in self.globals.values() {
-            self.heap.values.mark(&value.value, black_value);
+        for global in self.globals.values() {
+            self.heap.mark_value(&global.value);
         }
         for frame in self.callstack.iter() {
-            self.heap
-                .functions
-                .mark(&frame.closure().function, black_value);
+            self.heap.mark_function(&frame.closure().function);
         }
         for upvalue in &self.open_upvalues {
-            self.heap.values.mark(upvalue, black_value);
+            self.heap.mark_value(upvalue);
         }
 
         // Trace references

@@ -124,7 +124,7 @@ impl<K: Key, V: ArenaValue> Arena<K, V> {
         std::mem::replace(&mut self.gray, Vec::with_capacity(capacity))
     }
 
-    pub fn mark(&mut self, index: &ArenaId<K, V>, black_value: bool) -> bool {
+    fn mark(&mut self, index: &ArenaId<K, V>, black_value: bool) -> bool {
         debug_assert_eq!(index.arena.as_ptr().cast_const(), self);
         self.mark_raw(index.id, black_value)
     }
@@ -204,7 +204,7 @@ impl BuiltinConstants {
             true_: heap.add_value(Value::Bool(true)),
             false_: heap.add_value(Value::Bool(false)),
             init_string: heap.add_string("init".to_string()),
-            numbers: (0..1024)
+            numbers: (0..3)
                 .map(|n| heap.add_value(Value::Number(n.into())))
                 .collect(),
         }
@@ -317,12 +317,22 @@ impl Heap {
         }
     }
 
+    pub fn mark_value(&mut self, id: &ValueId) {
+        self.blacken_value(id.id)
+    }
+
+    pub fn mark_function(&mut self, id: &FunctionId) {
+        self.blacken_function(id.id)
+    }
+
     fn blacken_value(&mut self, index: ValueKey) {
         if self.log_gc {
             eprintln!("Value/{:?} blacken {}", index, self.values[index]);
         }
 
-        self.values.mark_raw(index, self.black_value);
+        if !self.values.mark_raw(index, self.black_value) {
+            return;
+        }
         match &self.values[index] {
             Value::Bool(_)
             | Value::Nil
@@ -365,23 +375,25 @@ impl Heap {
         }
     }
 
-    fn blacken_string(&mut self, index: StringKey) {
+    pub fn blacken_string(&mut self, index: StringKey) {
         if self.log_gc {
             eprintln!("String/{:?} blacken {}", index, self.strings[index]);
         }
         self.strings.mark_raw(index, self.black_value);
     }
 
-    fn blacken_function(&mut self, index: FunctionKey) {
+    pub fn blacken_function(&mut self, index: FunctionKey) {
         if self.log_gc {
             eprintln!("Function/{:?} blacken {}", index, self.functions[index]);
+        }
+        if !self.functions.mark_raw(index, self.black_value) {
+            return;
         }
         let function = &self.functions[index];
         self.strings.gray.push(function.name.id);
         for constant in function.chunk.constants() {
             self.values.gray.push(constant.id);
         }
-        self.functions.mark_raw(index, self.black_value);
     }
 
     pub fn sweep(&mut self) {
@@ -410,19 +422,19 @@ impl Heap {
 
     pub fn add_value(&mut self, value: Value) -> ValueId {
         let value_id = self.values.add(value);
-        self.values.mark(&value_id, !self.black_value);
+        self.values.set_marked(value_id.id, !self.black_value);
         value_id
     }
 
     pub fn add_string(&mut self, value: String) -> StringId {
         let string_id = self.strings.add(value);
-        self.strings.mark(&string_id, !self.black_value);
+        self.strings.set_marked(string_id.id, !self.black_value);
         string_id
     }
 
     pub fn add_function(&mut self, value: Function) -> FunctionId {
         let function_id = self.functions.add(value);
-        self.functions.mark(&function_id, !self.black_value);
+        self.functions.set_marked(function_id.id, !self.black_value);
         function_id
     }
 }
