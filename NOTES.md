@@ -60,10 +60,18 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 
 # Dependencies
 
+In alphabetical order:
+
+* `clap`: Because manually parsing arguments is not fun
+* `derivative`: Mostly to ignore some fields of structs in derived comparison implementations
+* `humansize`: To output nice memory sizes under `--log-gc`
 * `num_enum`: More safely and conveniently convert between the `u8` of byte-code and `OpCode`s
+* `paste`: For macro goodness
+* `rustc-hash`: Fast hashmaps everywhere. In a production language you'd probably want a cryptographically safer hashmap implementation.
 * `shrinkwraprs`: We use `u8` / `usize` for a ton of different meanings. Would be good to not mix them up. This helps with that. Currently only really used by `chunk.rs`.
   * If used incorrectly it'll likely have a pretty bad performance impact, but: first make it correct, then make it fast.
-  * It also leads to a fair bit of `.as_ref()` noise, but... maybe it's still worth it? Let's see.
+  * It also leads to a fair bit of `.as_ref()` noise, but... maybe it's still worth it?
+* `slotmap`: Fast storage backend for heap arenas.
 
 # Performance
 
