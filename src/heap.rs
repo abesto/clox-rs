@@ -55,12 +55,9 @@ struct Item<T> {
     item: T,
 }
 
-impl<T> From<T> for Item<T> {
-    fn from(item: T) -> Self {
-        Self {
-            item,
-            marked: false,
-        }
+impl<T> Item<T> {
+    fn new(item: T, marked: bool) -> Self {
+        Self { item, marked }
     }
 }
 
@@ -91,8 +88,8 @@ impl<K: Key, V: ArenaValue> Arena<K, V> {
         }
     }
 
-    fn add(&mut self, value: V) -> ArenaId<K, V> {
-        let id = self.data.insert(value.into());
+    fn add(&mut self, value: V, black_value: bool) -> ArenaId<K, V> {
+        let id = self.data.insert(Item::new(value, !black_value));
         self.bytes_allocated += std::mem::size_of::<V>();
 
         if self.log_gc {
@@ -204,7 +201,7 @@ impl BuiltinConstants {
             true_: heap.add_value(Value::Bool(true)),
             false_: heap.add_value(Value::Bool(false)),
             init_string: heap.add_string("init".to_string()),
-            numbers: (0..3)
+            numbers: (0..1024)
                 .map(|n| heap.add_value(Value::Number(n.into())))
                 .collect(),
         }
@@ -421,20 +418,14 @@ impl Heap {
     }
 
     pub fn add_value(&mut self, value: Value) -> ValueId {
-        let value_id = self.values.add(value);
-        self.values.set_marked(value_id.id, !self.black_value);
-        value_id
+        self.values.add(value, self.black_value)
     }
 
     pub fn add_string(&mut self, value: String) -> StringId {
-        let string_id = self.strings.add(value);
-        self.strings.set_marked(string_id.id, !self.black_value);
-        string_id
+        self.strings.add(value, self.black_value)
     }
 
     pub fn add_function(&mut self, value: Function) -> FunctionId {
-        let function_id = self.functions.add(value);
-        self.functions.set_marked(function_id.id, !self.black_value);
-        function_id
+        self.functions.add(value, self.black_value)
     }
 }
