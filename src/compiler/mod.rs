@@ -61,12 +61,16 @@ struct NestableState<'scanner> {
     loop_state: Option<LoopState>,
 }
 
-struct ClassState {}
+struct ClassState {
+    pub has_superclass: bool,
+}
 
 impl ClassState {
     #[must_use]
     fn new() -> Self {
-        Self {}
+        Self {
+            has_superclass: false,
+        }
     }
 }
 
@@ -269,5 +273,9 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
 
     fn current_class(&self) -> Option<&ClassState> {
         self.class_state.last()
+    }
+
+    fn current_class_mut(&mut self) -> Option<&mut ClassState> {
+        self.class_state.last_mut()
     }
 }

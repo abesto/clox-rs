@@ -1,7 +1,7 @@
 use super::{rules::Precedence, ClassState, Compiler, FunctionType, LoopState};
 use crate::{
     chunk::{CodeOffset, ConstantIndex, OpCode},
-    scanner::TokenKind as TK,
+    scanner::{Token, TokenKind as TK},
     types::Line,
 };
 
@@ -150,8 +150,20 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
                 self.error("A calss can't inherit from itself.");
             }
 
+            self.begin_scope();
+            self.add_local(
+                Token {
+                    kind: TK::Super,
+                    lexeme: "super".as_bytes(),
+                    line: self.line(),
+                },
+                false,
+            );
+            self.define_variable(None, false);
+
             self.named_variable(&class_name, false);
             self.emit_byte(OpCode::Inherit);
+            self.current_class_mut().unwrap().has_superclass = true;
         }
 
         self.named_variable(class_name, false);
@@ -161,6 +173,11 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
         }
         self.consume(TK::RightBrace, "Expect '}' after class body.");
         self.emit_byte(OpCode::Pop);
+
+        if self.current_class().unwrap().has_superclass {
+            self.end_scope();
+        }
+
         self.class_state.pop();
     }
 
