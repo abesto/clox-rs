@@ -28,8 +28,14 @@ craftinginterpreters-test-both: craftinginterpreters-test craftinginterpreters-t
 
 .PHONY: custom-dart-test
 custom-dart-test: $(DEBUG_BIN)
-	dart $(CRAFTING_INTERPRETERS)/tool/bin/test.dart clox --interpreter $(DEBUG_BIN) --arguments --stress-gc
 	dart $(CRAFTING_INTERPRETERS)/tool/bin/test.dart clox --interpreter $(DEBUG_BIN)
 
+.PHONY: custom-dart-test-stress-gc
+custom-dart-test-stress-gc: $(DEBUG_BIN)
+	dart $(CRAFTING_INTERPRETERS)/tool/bin/test.dart clox --interpreter $(DEBUG_BIN) --arguments --stress-gc
+
+.PHONY: custom-dart-test-both
+custom-dart-test-both: custom-dart-test custom-dart-test-stress-gc
+
 .PHONY: test
-test: cargo-test craftinginterpreters-test custom-dart-test
+test: cargo-test craftinginterpreters-test-both custom-dart-test-both
