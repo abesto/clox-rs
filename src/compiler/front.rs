@@ -1,7 +1,7 @@
 use super::{rules::Precedence, ClassState, Compiler, FunctionType, LoopState};
 use crate::{
     chunk::{CodeOffset, ConstantIndex, OpCode},
-    scanner::{Token, TokenKind as TK},
+    scanner::TokenKind as TK,
     types::Line,
 };
 
@@ -147,18 +147,11 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
             self.variable(false);
 
             if class_name == self.previous.as_ref().unwrap().as_str() {
-                self.error("A calss can't inherit from itself.");
+                self.error("A class can't inherit from itself.");
             }
 
             self.begin_scope();
-            self.add_local(
-                Token {
-                    kind: TK::Super,
-                    lexeme: "super".as_bytes(),
-                    line: self.line(),
-                },
-                false,
-            );
+            self.add_local(self.synthetic_token(TK::Super), false);
             self.define_variable(None, false);
 
             self.named_variable(&class_name, false);

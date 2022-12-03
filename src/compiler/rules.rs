@@ -104,7 +104,7 @@ pub(super) fn make_rules<'scanner, 'arena>() -> Rules<'scanner, 'arena> {
         Print        = [None,     None,   None],
         Return       = [None,     None,   None],
         Switch       = [None,     None,   None],
-        Super        = [None,     None,   None],
+        Super        = [super_,   None,   None],
         This         = [this,     None,   None],
         True         = [literal,  None,   None],
         Var          = [None,     None,   None],
@@ -266,5 +266,37 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
 
         self.parse_precedence(Precedence::Or);
         self.patch_jump(end_jump);
+    }
+
+    fn super_(&mut self, _can_assign: bool) {
+        match self.current_class() {
+            None => {
+                self.error("Can't use 'super' outside of a class.");
+            }
+            Some(class) if !class.has_superclass => {
+                self.error("Can't use 'super' in a class with no superclass.");
+            }
+            _ => {}
+        }
+
+        self.consume(TK::Dot, "Expect '.' after 'super'.");
+        self.consume(TK::Identifier, "Expect superclass method name.");
+        let name = self.identifier_constant(self.previous.as_ref().unwrap().as_str().to_string());
+        self.named_variable(self.synthetic_token(TK::This).as_str(), false);
+        if self.match_(TK::LeftParen) {
+            let arg_count = self.argument_list();
+            self.named_variable(self.synthetic_token(TK::Super).as_str(), false);
+            self.emit_byte(OpCode::SuperInvoke);
+            if !self.emit_number(*name, false) {
+                self.error("Too many constants while compiling OP_SUPER_INVOKE");
+            }
+            self.emit_byte(arg_count);
+        } else {
+            self.named_variable(self.synthetic_token(TK::Super).as_str(), false);
+            self.emit_byte(OpCode::GetSuper);
+            if !self.emit_number(*name, false) {
+                self.error("Too many constants while compiling OP_GET_SUPER");
+            }
+        }
     }
 }

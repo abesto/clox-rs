@@ -1,5 +1,6 @@
 use crate::{
     chunk::{CodeOffset, OpCode},
+    scanner::{Token, TokenKind},
     value::Value,
 };
 
@@ -91,6 +92,19 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
             true
         } else {
             false
+        }
+    }
+
+    pub(super) fn synthetic_token(&self, kind: TokenKind) -> Token<'scanner> {
+        Token {
+            kind,
+            lexeme: match kind {
+                TokenKind::Super => "super",
+                TokenKind::This => "this",
+                _ => unimplemented!(),
+            }
+            .as_bytes(),
+            line: self.line(),
         }
     }
 }

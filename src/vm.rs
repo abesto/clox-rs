@@ -368,23 +368,12 @@ impl VM {
                 }
 
                 OpCode::Class => {
-                    let constant = self.read_constant(false);
-                    let class = match &self.heap.values[&constant] {
-                        Value::String(string_id) => Class::new(*string_id),
-                        x => {
-                            panic!("Non-string operand to OP_CLASS: `{}`", x);
-                        }
-                    };
+                    let class_name = self.read_string("OP_CLASS");
+                    let class = Class::new(class_name);
                     self.stack_push_value(class.into());
                 }
                 OpCode::GetProperty => {
-                    let constant = self.read_constant(false);
-                    let field = match &self.heap.values[&constant] {
-                        Value::String(string_id) => *string_id,
-                        x => {
-                            panic!("Non-string property name to GET_PROPERTY: `{}`", x);
-                        }
-                    };
+                    let field = self.read_string("GET_PROPERTY");
 
                     let instance = match &self.heap.values
                         [self.peek(0).expect("Stack underflow in GET_PROPERTY")]
@@ -418,13 +407,7 @@ impl VM {
                     }
                 }
                 OpCode::SetProperty => {
-                    let constant = self.read_constant(false);
-                    let field_string_id = match &self.heap.values[&constant] {
-                        Value::String(string_id) => *string_id,
-                        x => {
-                            panic!("Non-string property name to SET_PROPERTY: `{}`", x);
-                        }
-                    };
+                    let field_string_id = self.read_string("SET_PROPERTY");
                     let field = &self.heap.strings[&field_string_id];
 
                     match &self.heap.values[self.peek(1).expect("Stack underflow in SET_PROPERTY")]
@@ -454,24 +437,12 @@ impl VM {
                 }
 
                 OpCode::Method => {
-                    let constant = self.read_constant(false);
-                    let method_name = match &self.heap.values[&constant] {
-                        Value::String(string_id) => *string_id,
-                        x => {
-                            panic!("Non-string method name to OP_METHOD: `{}`", x);
-                        }
-                    };
+                    let method_name = self.read_string("OP_METHOD");
                     self.define_method(method_name);
                 }
 
                 OpCode::Invoke => {
-                    let constant = self.read_constant(false);
-                    let method_name = match &self.heap.values[&constant] {
-                        Value::String(string_id) => *string_id,
-                        x => {
-                            panic!("Non-string method name to OP_INVOKE: `{}`", x);
-                        }
-                    };
+                    let method_name = self.read_string("OP_INVOKE");
                     let arg_count = self.read_byte();
                     if !self.invoke(method_name, arg_count) {
                         return InterpretResult::RuntimeError;
@@ -488,6 +459,23 @@ impl VM {
                             runtime_error!(self, "Superclass must be a class.");
                             return InterpretResult::RuntimeError;
                         }
+                    }
+                }
+
+                OpCode::GetSuper => {
+                    let method_name = self.read_string("OP_GET_SUPER");
+                    let superclass = self.stack.pop().expect("Stack underflow in OP_GET_SUPER");
+                    if !self.bind_method(superclass, method_name) {
+                        return InterpretResult::RuntimeError;
+                    }
+                }
+
+                OpCode::SuperInvoke => {
+                    let method_name = self.read_string("OP_SUPER_INVOKE");
+                    let arg_count = self.read_byte();
+                    let superclass = self.stack.pop().expect("Stack underflow in OP_SUPER_INVOKE");
+                    if !self.invoke_from_class(superclass, method_name, arg_count) {
+                        return InterpretResult::RuntimeError;
                     }
                 }
             };
@@ -766,6 +754,16 @@ impl VM {
     fn read_constant(&mut self, long: bool) -> ValueId {
         let index = self.read_constant_index(long);
         self.read_constant_value(index)
+    }
+
+    fn read_string(&mut self, opcode_name: &str) -> StringId {
+        let constant = self.read_constant(false);
+        match &self.heap.values[&constant] {
+            Value::String(string_id) => *string_id,
+            x => {
+                panic!("Non-string method name to {opcode_name}: `{x}`");
+            }
+        }
     }
 
     fn binary_op<T: Into<Value>>(&mut self, op: BinaryOp<T>) -> bool {
