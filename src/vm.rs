@@ -477,6 +477,19 @@ impl VM {
                         return InterpretResult::RuntimeError;
                     }
                 }
+
+                OpCode::Inherit => {
+                    let superclass = self.peek(1).expect("Stack underflow in OP_INHERIT").as_class();
+                    let methods = superclass.methods.clone();
+                    let subclass = self.stack.pop().expect("Stack underflow in OP_INHERIT");
+                    match &mut self.heap.values[&subclass] {
+                        Value::Class(subclass) => { subclass.methods.extend(methods); }
+                        _ => {
+                            runtime_error!(self, "Superclass must be a class.");
+                            return InterpretResult::RuntimeError;
+                        }
+                    }
+                }
             };
         }
     }

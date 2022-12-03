@@ -242,13 +242,6 @@ impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
         self.emit_constant(string_id);
     }
 
-    fn variable(&mut self, can_assign: bool) {
-        self.named_variable(
-            self.previous.as_ref().unwrap().as_str().to_string(),
-            can_assign,
-        );
-    }
-
     fn this(&mut self, _can_assign: bool) {
         if self.current_class().is_none() {
             self.error("Can't use 'this' outside of a class.");
