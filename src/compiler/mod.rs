@@ -124,7 +124,7 @@ pub struct Compiler<'scanner, 'heap> {
 impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
     #[must_use]
     pub fn new(scanner: Scanner<'scanner>, heap: &'heap mut Heap) -> Self {
-        let function_name = heap.strings.add(String::from("<script>"));
+        let function_name = heap.add_string(String::from("<script>"));
 
         let mut strings_by_name: HashMap<String, StringId> = HashMap::default();
         let init_string = heap.builtin_constants().init_string;

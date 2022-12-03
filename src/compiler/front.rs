@@ -101,8 +101,8 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
         let nested_upvalues = nested_state.upvalues;
 
         self.emit_byte(OpCode::Closure);
-        let function_id = self.heap.functions.add(nested_function);
-        let value_id = self.heap.values.add(function_id.into());
+        let function_id = self.heap.add_function(nested_function);
+        let value_id = self.heap.add_value(function_id.into());
         let value_id_byte = u8::try_from(self.current_chunk().make_constant(value_id).0).unwrap();
         self.emit_byte(value_id_byte);
 

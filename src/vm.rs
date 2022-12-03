@@ -158,9 +158,9 @@ impl VM {
         let result = if let Some(function) = compiler.compile() {
             native_functions.define_functions(self);
 
-            let function_id = self.heap.functions.add(function);
+            let function_id = self.heap.add_function(function);
             let closure = Value::closure(function_id);
-            let value_id = self.heap.values.add(closure);
+            let value_id = self.heap.add_value(closure);
             self.stack_push(value_id);
             self.execute_call(value_id, 0);
             self.run()
@@ -291,7 +291,7 @@ impl VM {
                     eprintln!();
                     */
 
-                    let closure_id = self.heap.values.add(Value::from(closure));
+                    let closure_id = self.heap.add_value(Value::from(closure));
                     self.stack_push(closure_id);
                 }
                 OpCode::Nil => self.stack_push(self.heap.builtin_constants().nil),
@@ -515,7 +515,7 @@ impl VM {
                 (Value::String(a), Value::String(b)) => {
                     // This could be optimized by allowing mutations via the heap
                     let new_string = format!("{}{}", self.heap.strings[a], self.heap.strings[b]);
-                    let new_string_id = self.heap.strings.add(new_string);
+                    let new_string_id = self.heap.add_string(new_string);
                     self.stack.pop();
                     self.stack.pop();
                     self.stack_push_value(new_string_id.into());
@@ -810,8 +810,8 @@ impl VM {
         let value_id = match value {
             Value::Bool(bool) => self.heap.builtin_constants().bool(bool),
             Value::Nil => self.heap.builtin_constants().nil,
-            Value::Number(n) => self.heap.builtin_constants().number(n).unwrap_or_else(|| self.heap.values.add(value)),
-            value => self.heap.values.add(value)
+            Value::Number(n) => self.heap.builtin_constants().number(n).unwrap_or_else(|| self.heap.add_value(value)),
+            value => self.heap.add_value(value)
         };
         self.stack.push(value_id);
     }
@@ -865,7 +865,7 @@ impl VM {
                     .methods
                     .get(&self.heap.builtin_constants().init_string)
                     .cloned();
-                let instance_id: ValueId = self.heap.values.add(Instance::new(callee).into());
+                let instance_id: ValueId = self.heap.add_value(Instance::new(callee).into());
                 // Replace the class with the instance on the stack
                 let stack_index = self.stack.len() - usize::from(arg_count) - 1;
                 self.stack[stack_index] = instance_id;
@@ -949,7 +949,7 @@ impl VM {
         }
 
         let upvalue = Value::Upvalue(Upvalue::Open(local));
-        let upvalue_id = self.heap.values.add(upvalue);
+        let upvalue_id = self.heap.add_value(upvalue);
         self.open_upvalues.insert(upvalue_index, upvalue_id);
 
         /*
@@ -1021,7 +1021,7 @@ impl VM {
             arity,
             fun,
         });
-        let value_id = self.heap.values.add(value);
+        let value_id = self.heap.add_value(value);
 
         self.globals.insert(
             name,

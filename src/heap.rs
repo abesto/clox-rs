@@ -91,7 +91,7 @@ impl<K: Key, V: ArenaValue> Arena<K, V> {
         }
     }
 
-    pub fn add(&mut self, value: V) -> ArenaId<K, V> {
+    fn add(&mut self, value: V) -> ArenaId<K, V> {
         let id = self.data.insert(value.into());
         self.bytes_allocated += std::mem::size_of::<V>();
 
@@ -200,12 +200,12 @@ impl BuiltinConstants {
     #[must_use]
     pub fn new(heap: &mut Heap) -> Self {
         Self {
-            nil: heap.values.add(Value::Nil),
-            true_: heap.values.add(Value::Bool(true)),
-            false_: heap.values.add(Value::Bool(false)),
-            init_string: heap.strings.add("init".to_string()),
+            nil: heap.add_value(Value::Nil),
+            true_: heap.add_value(Value::Bool(true)),
+            false_: heap.add_value(Value::Bool(false)),
+            init_string: heap.add_string("init".to_string()),
             numbers: (0..1024)
-                .map(|n| heap.values.add(Value::Number(n.into())))
+                .map(|n| heap.add_value(Value::Number(n.into())))
                 .collect(),
         }
     }
@@ -406,5 +406,23 @@ impl Heap {
                 humansize::format_size(self.next_gc, humansize::BINARY),
             );
         }
+    }
+
+    pub fn add_value(&mut self, value: Value) -> ValueId {
+        let value_id = self.values.add(value);
+        self.values.mark(&value_id, !self.black_value);
+        value_id
+    }
+
+    pub fn add_string(&mut self, value: String) -> StringId {
+        let string_id = self.strings.add(value);
+        self.strings.mark(&string_id, !self.black_value);
+        string_id
+    }
+
+    pub fn add_function(&mut self, value: Function) -> FunctionId {
+        let function_id = self.functions.add(value);
+        self.functions.mark(&function_id, !self.black_value);
+        function_id
     }
 }

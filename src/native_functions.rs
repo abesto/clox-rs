@@ -10,7 +10,7 @@ use crate::{
 };
 
 fn clock_native(heap: &mut Heap, _args: &[&ValueId]) -> Result<ValueId, String> {
-    Ok(heap.values.add(Value::Number(
+    Ok(heap.add_value(Value::Number(
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -20,7 +20,7 @@ fn clock_native(heap: &mut Heap, _args: &[&ValueId]) -> Result<ValueId, String> 
 
 fn sqrt_native(heap: &mut Heap, args: &[&ValueId]) -> Result<ValueId, String> {
     match &heap.values[args[0]] {
-        Value::Number(n) => Ok(heap.values.add(n.sqrt().into())),
+        Value::Number(n) => Ok(heap.add_value(n.sqrt().into())),
         x => Err(format!("'sqrt' expected numeric argument, got: {}", *x)),
     }
 }
@@ -113,7 +113,7 @@ impl NativeFunctions {
 
     pub fn create_names(&mut self, heap: &mut Heap) {
         for name in ["clock", "sqrt", "getattr", "setattr", "hasattr", "delattr"] {
-            let string_id = heap.strings.add(name.to_string());
+            let string_id = heap.add_string(name.to_string());
             self.string_ids.insert(name.to_string(), string_id);
         }
     }

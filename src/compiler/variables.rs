@@ -106,7 +106,7 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
         S: ToString,
     {
         match self.strings_by_name.entry(s.to_string()) {
-            Entry::Vacant(entry) => *entry.insert(self.heap.strings.add(s.to_string())),
+            Entry::Vacant(entry) => *entry.insert(self.heap.add_string(s.to_string())),
             Entry::Occupied(entry) => *entry.get(),
         }
     }
@@ -120,7 +120,7 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
         if let Some(index) = self.globals_by_name().get(&string_id) {
             *index
         } else {
-            let value_id = self.heap.values.add(string_id.into());
+            let value_id = self.heap.add_value(string_id.into());
             let index = self.current_chunk().make_constant(value_id);
             self.globals_by_name_mut().insert(string_id, index);
             index
