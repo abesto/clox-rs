@@ -450,16 +450,17 @@ impl VM {
                 }
 
                 OpCode::Inherit => {
-                    let superclass = self.peek(1).expect("Stack underflow in OP_INHERIT").as_class();
-                    let methods = superclass.methods.clone();
-                    let subclass = self.stack.pop().expect("Stack underflow in OP_INHERIT");
-                    match &mut self.heap.values[&subclass] {
-                        Value::Class(subclass) => { subclass.methods.extend(methods); }
+                    let superclass_id = self.peek(1).expect("Stack underflow in OP_INHERIT");
+                    let superclass = match &self.heap.values[superclass_id] {
+                        Value::Class(superclass) => {superclass }
                         _ => {
                             runtime_error!(self, "Superclass must be a class.");
                             return InterpretResult::RuntimeError;
                         }
-                    }
+                    };
+                    let methods = superclass.methods.clone();
+                    let mut subclass = self.stack.pop().expect("Stack underflow in OP_INHERIT");
+                    subclass.as_class_mut().methods.extend(methods);
                 }
 
                 OpCode::GetSuper => {

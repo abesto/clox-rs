@@ -132,14 +132,14 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
         self.consume(TK::Identifier, "Expect class name.");
         let class_name = self.previous.as_ref().unwrap().as_str().to_string();
         let name_constant = self.identifier_constant(class_name.to_string());
-        self.declare_variable(false);
+        self.declare_variable(true);
 
         self.emit_bytes(
             OpCode::Class,
             ConstantIndex::try_from(name_constant)
                 .expect("Too many constants when declaring class."),
         );
-        self.define_variable(Some(name_constant), false);
+        self.define_variable(Some(name_constant), true);
         self.class_state.push(ClassState::new());
 
         if self.match_(TK::Less) {
