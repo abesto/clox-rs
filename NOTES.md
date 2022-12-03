@@ -126,3 +126,6 @@ Summary
   * Replacing `slotmap::HopSlotMap` with any of the other `SlotMap` flavors, or `slab::Slab`, or `generational_arena::Arena` significantly decreased performance in this benchmark.
   * Using built-in constants for `true`, `false`, `nil`, and integers 0-1024 gives us a further speedup to 4.74 ± 0.14 times slower than `clox`, since we save a ton of time not doing GC on these values. This is on par with the performance before GC. It's also cheating as this is an optimization technique not used in `clox`, but hey, cheating is technique.
   * Switching from `hashbrown` to `rustc_hash` provides a small speedup, to now 4.15 ± 0.13 times slower than `clox`.
+
+* EOF
+ * Catching some bugs in GC unfortunately had a performance overhead; some micro-optimizations minimizing the number of arena lookups during GC gives us the final count: 4.51 ± 0.19 slower than `clox`. I'd be interested in learning how this can be brought closer to the performance of `clox` (without breaking out a whole lot of `unsafe` to manually manage memory). For this project, I'm OK with this result.

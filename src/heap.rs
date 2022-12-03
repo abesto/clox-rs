@@ -112,10 +112,6 @@ impl<K: Key, V: ArenaValue> Arena<K, V> {
         self.data[index].marked == black_value
     }
 
-    fn set_marked(&mut self, index: K, marked: bool) {
-        self.data[index].marked = marked;
-    }
-
     fn flush_gray(&mut self) -> Vec<K> {
         let capacity = self.gray.capacity();
         std::mem::replace(&mut self.gray, Vec::with_capacity(capacity))
@@ -127,13 +123,14 @@ impl<K: Key, V: ArenaValue> Arena<K, V> {
     }
 
     fn mark_raw(&mut self, index: K, black_value: bool) -> bool {
-        if self.is_marked(index, black_value) {
+        let value = &mut self.data[index];
+        if value.marked == black_value {
             return false;
         }
         if self.log_gc {
-            eprintln!("{}/{:?} mark {}", self.name, index, self[index]);
+            eprintln!("{}/{:?} mark {}", self.name, index, value.item);
         }
-        self.set_marked(index, black_value);
+        value.marked = black_value;
         self.gray.push(index);
         true
     }
@@ -327,10 +324,16 @@ impl Heap {
             eprintln!("Value/{:?} blacken {}", index, self.values[index]);
         }
 
-        if !self.values.mark_raw(index, self.black_value) {
+        let item = &mut self.values.data[index];
+        if item.marked == self.black_value {
             return;
         }
-        match &self.values[index] {
+        if self.log_gc {
+            eprintln!("Value/{index:?} mark {}", item.item);
+        }
+        item.marked = self.black_value;
+        self.values.gray.push(index);
+        match &item.item {
             Value::Bool(_)
             | Value::Nil
             | Value::Number(_)
@@ -383,10 +386,17 @@ impl Heap {
         if self.log_gc {
             eprintln!("Function/{:?} blacken {}", index, self.functions[index]);
         }
-        if !self.functions.mark_raw(index, self.black_value) {
+        let item = &mut self.functions.data[index];
+        if item.marked == self.black_value {
             return;
         }
-        let function = &self.functions[index];
+        if self.log_gc {
+            eprintln!("Function/{index:?} mark {}", item.item);
+        }
+        item.marked = self.black_value;
+        self.functions.gray.push(index);
+        let function = &item.item;
+
         self.strings.gray.push(function.name.id);
         for constant in function.chunk.constants() {
             self.values.gray.push(constant.id);
