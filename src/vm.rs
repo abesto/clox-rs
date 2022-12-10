@@ -127,24 +127,37 @@ impl CallStack {
     }
 }
 
-pub struct VM {
+pub struct VM<Stdout: std::io::Write> {
     heap: Pin<Box<Heap>>,
     callstack: CallStack,
     stack: Vec<ValueId>,
     globals: HashMap<StringId, Global>,
     open_upvalues: VecDeque<ValueId>,
+    stdout: Stdout
 }
 
-impl VM {
+impl VM<std::io::Stdout> {
     #[must_use]
     pub fn new() -> Self {
+        Self::with_stdout(std::io::stdout())
+    }
+}
+
+impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
+    #[must_use]
+    pub fn with_stdout(stdout: Stdout) -> Self {
         Self {
             heap: Heap::new(),
             callstack: CallStack::new(),
             stack: Vec::with_capacity(crate::config::STACK_MAX),
             globals: HashMap::default(),
             open_upvalues: VecDeque::new(),
+            stdout
         }
+    }
+
+    pub fn to_stdout(self) -> Stdout {
+        self.stdout
     }
 
     pub fn interpret(&mut self, source: &[u8]) -> InterpretResult {
@@ -183,25 +196,27 @@ impl VM {
                 let function = &self.callstack.function();
                 let mut disassembler = InstructionDisassembler::new(&function.chunk);
                 *disassembler.offset = self.callstack.current().ip;
-                println!(
+                writeln!(
+                    self.stdout,
                     "          [ {} ]",
                     self.stack
                         .iter()
                         .map(|v| format!("{}", self.heap.values[v]))
                         .collect::<Vec<_>>()
                         .join(" ][ ")
-                );
-                print!("{:?}", disassembler);
+                ).unwrap();
+                write!(self.stdout, "{:?}", disassembler).unwrap();
             }
             self.collect_garbage(stress_gc);
             match OpCode::try_from(self.read_byte())
                 .expect("Internal error: unrecognized opcode")
             {
                 OpCode::Print => {
-                    println!(
+                    writeln!(
+                        self.stdout,
                         "{}",
                         *self.stack.pop().expect("stack underflow in OP_PRINT")
-                    );
+                    ).unwrap();
                 }
                 OpCode::Pop => {
                     self.stack.pop().expect("stack underflow in OP_POP");

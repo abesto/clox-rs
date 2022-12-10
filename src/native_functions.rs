@@ -122,7 +122,7 @@ impl NativeFunctions {
         compiler.inject_strings(&self.string_ids);
     }
 
-    pub fn define_functions(&self, vm: &mut VM) {
+    pub fn define_functions<Stdout: std::io::Write>(&self, vm: &mut VM<Stdout>) {
         vm.define_native(self.string_ids["clock"], 0, clock_native);
         vm.define_native(self.string_ids["sqrt"], 1, sqrt_native);
         vm.define_native(self.string_ids["getattr"], 2, getattr_native);

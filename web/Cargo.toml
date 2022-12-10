@@ -1,0 +1,8 @@
+[package]
+edition = "2021"
+name = "web"
+version = "0.1.0"
+
+[dependencies]
+clox-rs = {path = "../"}
+yew = {version = "0.20", features = ["csr"]}

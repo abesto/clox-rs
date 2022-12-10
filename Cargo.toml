@@ -13,6 +13,12 @@ rustc-hash = "1.1.0"
 shrinkwraprs = "0.3.0"
 slotmap = "1.0.6"
 
+[lib]
+name = "clox_rs"
+
+[workspace]
+members = ["web"]
+
 # Uncomment for valgrind profiling
 #[profile.release]
 #debug = true

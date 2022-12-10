@@ -2,7 +2,8 @@ CRAFTING_INTERPRETERS ?= ../craftinginterpreters
 DEBUG_BIN := target/debug/clox-rs
 
 test_level := chap30_optimization
-sources := src/*.rs src/compiler/*.rs Cargo.toml
+sources := Cargo.toml $(shell find src/ -type f)
+web_sources := web/Cargo.toml $(shell find web/src/ -type f) $(shell find web/src/ -type f -name '*.html' -name '*.css')
 
 $(DEBUG_BIN): $(sources)
 	cargo build
@@ -39,3 +40,11 @@ custom-dart-test-both: custom-dart-test custom-dart-test-stress-gc
 
 .PHONY: test
 test: cargo-test craftinginterpreters-test-both custom-dart-test-both
+
+.PHONY: web
+web: $(sources) $(web_sources)
+	cd web && trunk build --release
+
+.PHONY: web-dev
+web-dev:
+	cd web && trunk serve --open
