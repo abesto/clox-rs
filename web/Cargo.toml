@@ -5,10 +5,13 @@ version = "0.1.0"
 
 [dependencies]
 clox-rs = {path = "../"}
+console_log = "0.2.0"
 js-sys = "0.3.60"
+log = "0.4.17"
 # monaco = {version = "0.3.0", features = ["yew-components"]}
 # using monaco from git until there's a new release
-monaco = {git = "https://github.com/abesto/rust-monaco.git", rev = "e16c6c0", features = ["yew-components"]}
+monaco = {git = "https://github.com/abesto/rust-monaco.git", rev = "c6ef4e96f5619378428e15b870f366ca232350a3", features = ["yew-components"]}
+#monaco = {path = "../../rust-monaco", features = ["yew-components"]}
 wasm-bindgen = "0.2.83"
 yew = {version = "0.20", features = ["csr"]}
 

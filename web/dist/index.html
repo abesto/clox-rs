@@ -1,9 +1,36 @@
 <!DOCTYPE html><html lang="en"><head>
-    <base href="/clox-rs/">
-    <link rel="stylesheet" href="/clox-rs/style-9c0579ad300c983a.css">
+    <base href="/">
+    <link rel="stylesheet" href="/style-e2b2dfa037a56506.css">
   
-<link rel="preload" href="/clox-rs/web-d8f9e16ce3e41ea6_bg.wasm" as="fetch" type="application/wasm" crossorigin="">
-<link rel="modulepreload" href="/clox-rs/web-d8f9e16ce3e41ea6.js"></head>
+<link rel="preload" href="/web-790fd82ff7486bd8_bg.wasm" as="fetch" type="application/wasm" crossorigin="">
+<link rel="modulepreload" href="/web-790fd82ff7486bd8.js"></head>
   <body>
 
-<script type="module">import init from '/clox-rs/web-d8f9e16ce3e41ea6.js';init('/clox-rs/web-d8f9e16ce3e41ea6_bg.wasm');</script></body></html>
+<script type="module">import init from '/web-790fd82ff7486bd8.js';init('/web-790fd82ff7486bd8_bg.wasm');</script><script>(function () {
+    var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    var url = protocol + '//' + window.location.host + '/_trunk/ws';
+    var poll_interval = 5000;
+    var reload_upon_connect = () => {
+        window.setTimeout(
+            () => {
+                // when we successfully reconnect, we'll force a
+                // reload (since we presumably lost connection to
+                // trunk due to it being killed, so it will have
+                // rebuilt on restart)
+                var ws = new WebSocket(url);
+                ws.onopen = () => window.location.reload();
+                ws.onclose = reload_upon_connect;
+            },
+            poll_interval);
+    };
+
+    var ws = new WebSocket(url);
+    ws.onmessage = (ev) => {
+        const msg = JSON.parse(ev.data);
+        if (msg.reload) {
+            window.location.reload();
+        }
+    };
+    ws.onclose = reload_upon_connect;
+})()
+</script></body></html>
