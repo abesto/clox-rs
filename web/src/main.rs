@@ -2,7 +2,7 @@ mod monaco_lox;
 
 use clox_rs::vm::VM;
 use monaco::{
-    api::CodeEditorOptions,
+    api::{CodeEditorOptions, TextModel},
     sys::editor::{BuiltinTheme, IStandaloneCodeEditor},
     yew::{CodeEditor, CodeEditorLink},
 };
@@ -12,45 +12,54 @@ use yew::prelude::*;
 #[function_component(App)]
 fn app() -> Html {
     // Communicate with the editor
-    let editor_link = use_state_eq(|| CodeEditorLink::new());
+    let text_model =
+        use_state_eq(|| TextModel::create("print 3;", Some(monaco_lox::ID), None).unwrap());
     // Store the code
     let code = use_state_eq(|| String::new());
+    // Store the result
+    let stdout = use_state_eq(|| String::new());
 
-    // Run code, store stdout
-    let stdout = if code.is_empty() {
-        "".to_string()
-    } else {
-        let mut vm = VM::with_stdout(Vec::new());
-        let _result = vm.interpret(code.as_bytes());
-        std::str::from_utf8(&vm.into_stdout()).unwrap().to_string()
-    };
-
-    // Update the code when the Run button is clicked
-    let update_code_closure = {
+    // code -> stdout
+    {
         let code = code.clone();
-        let editor_link = editor_link.clone();
-        move || {
-            editor_link.with_editor(|editor| {
-                if let Some(model) = editor.get_model() {
-                    code.set(model.get_value());
-                }
-            });
-        }
-    };
-    let on_run_clicked = {
-        let update_code_closure = update_code_closure.clone();
-        Callback::from(move |_| update_code_closure())
+        let stdout = stdout.clone();
+        use_effect_with_deps(
+            move |code| {
+                let mut vm = VM::with_stdout(Vec::new());
+                let _result = vm.interpret(code.as_bytes());
+                stdout.set(std::str::from_utf8(&vm.into_stdout()).unwrap().to_string());
+            },
+            code,
+        )
     };
 
-    let on_editor_created = {
-        let js_closure = Closure::<dyn Fn()>::new(update_code_closure);
-        let editor_link = editor_link.clone();
-        let editor_dep = editor_link.clone();
+    // text_model -> code on button click
+    let on_run_clicked = {
+        let text_model = text_model.clone();
+        let code = code.clone();
         use_callback(
-            move |new_editor_link: CodeEditorLink, _deps| {
-                log::info!("on_editor_created {new_editor_link:?}");
-                new_editor_link.with_editor(|editor| {
-                    // Register Ctrl/Cmd + Enter to run the code
+            move |_, text_model| code.set(text_model.get_value()),
+            text_model,
+        )
+    };
+
+    // text_model -> code on hotkey
+    let on_editor_created = {
+        let text_model = text_model.clone();
+        let code = code.clone();
+
+        let js_closure = {
+            let code = code.clone();
+            let text_model = text_model.clone();
+            Closure::<dyn Fn()>::new(move || {
+                code.set(text_model.get_value());
+            })
+        };
+
+        use_callback(
+            move |editor_link: CodeEditorLink, _text_model| {
+                log::info!("render {editor_link:?}");
+                editor_link.with_editor(|editor| {
                     let keycode = monaco::sys::KeyCode::Enter.to_value()
                         | (monaco::sys::KeyMod::ctrl_cmd() as u32);
                     let raw_editor: &IStandaloneCodeEditor = editor.as_ref();
@@ -60,11 +69,8 @@ fn app() -> Html {
                         None,
                     );
                 });
-
-                // Store the (new) editor
-                editor_link.set(new_editor_link);
             },
-            (editor_dep,),
+            text_model,
         )
     };
 
@@ -81,7 +87,7 @@ fn app() -> Html {
             </div>
 
             <div class="code-container">
-                <CloxEditor {on_editor_created} link={(*editor_link).clone()} />
+                <CloxEditor {on_editor_created} text_model={(*text_model).clone()} />
                 <pre id="output" class="output">{ &*stdout }</pre>
             </div>
         </div>
@@ -91,22 +97,21 @@ fn app() -> Html {
 #[derive(PartialEq, Properties)]
 pub struct CloxEditorProps {
     on_editor_created: Callback<CodeEditorLink>,
-    link: CodeEditorLink,
+    text_model: TextModel,
 }
 
 #[function_component]
 pub fn CloxEditor(props: &CloxEditorProps) -> Html {
     let CloxEditorProps {
         on_editor_created,
-        link,
+        text_model,
     } = props;
     let options = CodeEditorOptions::default()
         .with_language(monaco_lox::ID.to_string())
         .with_builtin_theme(BuiltinTheme::Vs)
-        .with_value("print 3;".to_string())
         .with_automatic_layout(true);
     html! {
-        <CodeEditor classes={"code"} options={ options.to_sys_options() } {on_editor_created} link={link.clone()} />
+        <CodeEditor classes={"code"} options={ options.to_sys_options() } {on_editor_created} model={text_model.clone()} />
     }
 }
 
