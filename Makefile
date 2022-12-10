@@ -43,7 +43,8 @@ test: cargo-test craftinginterpreters-test-both custom-dart-test-both
 
 .PHONY: web
 web: $(sources) $(web_sources)
-	cd web && trunk build --release
+	cd web && trunk build --release --public-url /clox-rs/
+	git add web/dist
 
 .PHONY: web-dev
 web-dev:
