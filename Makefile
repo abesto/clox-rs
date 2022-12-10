@@ -3,7 +3,7 @@ DEBUG_BIN := target/debug/clox-rs
 
 test_level := chap30_optimization
 sources := Cargo.toml $(shell find src/ -type f)
-web_sources := web/Cargo.toml $(shell find web/src/ -type f) $(shell find web/src/ -type f -name '*.html' -name '*.css')
+web_sources := web/Cargo.toml $(shell find web/src/ -type f) $(shell find web/src/ -type f -name '*.html' -name '*.css' -name '*.js')
 
 $(DEBUG_BIN): $(sources)
 	cargo build

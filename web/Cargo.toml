@@ -5,4 +5,19 @@ version = "0.1.0"
 
 [dependencies]
 clox-rs = {path = "../"}
+js-sys = "0.3.60"
+# monaco = {version = "0.3.0", features = ["yew-components"]}
+# using monaco from git until there's a new release
+monaco = {git = "https://github.com/abesto/rust-monaco.git", rev = "e16c6c0", features = ["yew-components"]}
+wasm-bindgen = "0.2.83"
 yew = {version = "0.20", features = ["csr"]}
+
+[profile.release]
+# less code to include into binary
+panic = 'abort'
+# optimization over all codebase ( better optimization, slower build )
+codegen-units = 1
+# optimization for size ( more aggressive )
+opt-level = 'z'
+# link time optimization using using whole-program analysis
+lto = true

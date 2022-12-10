@@ -156,7 +156,7 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
         }
     }
 
-    pub fn to_stdout(self) -> Stdout {
+    pub fn into_stdout(self) -> Stdout {
         self.stdout
     }
 
