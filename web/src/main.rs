@@ -3,6 +3,7 @@ mod monaco_lox;
 use std::sync::Mutex;
 
 use clox_rs::{config, vm::VM};
+use js_sys::Object;
 use log::{Level, LevelFilter, Metadata, Record};
 use monaco::{
     api::{CodeEditorOptions, TextModel},
@@ -169,6 +170,7 @@ fn app() -> Html {
             move |editor_link: CodeEditorLink, _text_model| {
                 log::trace!("render {editor_link:?}");
                 editor_link.with_editor(|editor| {
+                    // Register Ctrl/Cmd + Enter hotkey
                     let keycode = monaco::sys::KeyCode::Enter.to_value()
                         | (monaco::sys::KeyMod::ctrl_cmd() as u32);
                     let raw_editor: &IStandaloneCodeEditor = editor.as_ref();
@@ -177,6 +179,12 @@ fn app() -> Html {
                         js_closure.as_ref().unchecked_ref(),
                         None,
                     );
+
+                    // While we have the raw editor, also set the indentation level
+                    let opts: monaco::sys::editor::ITextModelUpdateOptions =
+                        Object::new().unchecked_into();
+                    opts.set_tab_size(Some(2.0));
+                    raw_editor.get_model().unwrap().update_options(&opts);
                 });
             },
             text_model,
