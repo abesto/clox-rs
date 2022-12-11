@@ -118,7 +118,10 @@ impl NativeFunctions {
         }
     }
 
-    pub fn register_names(&mut self, compiler: &mut Compiler) {
+    pub fn register_names<STDOUT: Output, STDERR: Output>(
+        &mut self,
+        compiler: &mut Compiler<STDOUT, STDERR>,
+    ) {
         compiler.inject_strings(&self.string_ids);
     }
 

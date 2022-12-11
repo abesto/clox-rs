@@ -15,6 +15,7 @@ use crate::{
     scanner::{Scanner, Token, TokenKind},
     types::Line,
     value::Function,
+    vm::Output,
 };
 
 #[derive(Shrinkwrap, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Default, Debug)]
@@ -104,11 +105,11 @@ impl<'scanner> NestableState<'scanner> {
     }
 }
 
-pub struct Compiler<'scanner, 'heap> {
+pub struct Compiler<'scanner, 'heap, STDOUT: Output, STDERR: Output> {
     heap: &'heap mut Heap,
     strings_by_name: HashMap<String, StringId>,
 
-    rules: Rules<'scanner, 'heap>,
+    rules: Rules<'scanner, 'heap, STDOUT, STDERR>,
 
     scanner: Scanner<'scanner>,
     previous: Option<Token<'scanner>>,
@@ -119,11 +120,19 @@ pub struct Compiler<'scanner, 'heap> {
 
     nestable_state: Vec<NestableState<'scanner>>,
     class_state: Vec<ClassState>,
+
+    stdout: STDOUT,
+    stderr: STDERR,
 }
 
-impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
+impl<'scanner, 'heap, STDOUT: Output, STDERR: Output> Compiler<'scanner, 'heap, STDOUT, STDERR> {
     #[must_use]
-    pub fn new(scanner: Scanner<'scanner>, heap: &'heap mut Heap) -> Self {
+    pub fn new(
+        scanner: Scanner<'scanner>,
+        heap: &'heap mut Heap,
+        stdout: STDOUT,
+        stderr: STDERR,
+    ) -> Self {
         let function_name = heap.add_string(String::from("<script>"));
 
         let mut strings_by_name: HashMap<String, StringId> = HashMap::default();
@@ -141,6 +150,8 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
             rules: make_rules(),
             nestable_state: vec![NestableState::new(function_name, FunctionType::Script)],
             class_state: vec![],
+            stdout,
+            stderr,
         }
     }
 
@@ -182,7 +193,7 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
         result
     }
 
-    pub fn compile(mut self) -> Option<Function> {
+    pub fn compile(mut self) -> (Option<Function>, STDOUT, STDERR) {
         self.advance();
 
         while !self.match_(TokenKind::Eof) {
@@ -190,18 +201,20 @@ impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
         }
 
         self.end();
-        if self.had_error {
+        let function = if self.had_error {
             None
         } else {
             Some(self.nestable_state.pop().unwrap().current_function)
-        }
+        };
+        (function, self.stdout, self.stderr)
     }
 
     fn end(&mut self) {
         self.emit_return();
 
         if config::PRINT_CODE.load() && !self.had_error {
-            println!("{:?}", self.current_chunk());
+            let chunk = format!("{:?}", self.current_chunk());
+            writeln!(self.stdout, "{chunk}").unwrap();
         }
     }
 

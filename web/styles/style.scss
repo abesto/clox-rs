@@ -33,11 +33,18 @@ html {
 }
 
 .output {
+  padding: 15px;
   display: flex;
   flex-direction: column;
-}
-.stderr {
-  color: red;
+
+  pre {
+    margin: 0;
+  }
+
+  .stderr,
+  .status {
+    color: red;
+  }
 }
 
 .controls {

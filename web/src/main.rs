@@ -147,11 +147,11 @@ pub fn Output(props: &OutputProps) -> Html {
     };
 
     html! {
-        <output>
+        <div class="output">
             <pre class="stdout">{stdout}</pre>
-            {error_message}
+            <span class="status">{error_message}</span>
             <pre class="stderr">{stderr}</pre>
-        </output>
+        </div>
     }
 }
 

@@ -192,10 +192,18 @@ where
 
         let mut native_functions = NativeFunctions::new();
         native_functions.create_names(&mut self.heap);
-        let mut compiler = Compiler::new(scanner, &mut self.heap);
+        let mut compiler = Compiler::new(
+            scanner,
+            &mut self.heap,
+            std::mem::take(&mut self.stdout).unwrap(),
+            std::mem::take(&mut self.stderr).unwrap(),
+        );
         native_functions.register_names(&mut compiler);
 
-        let result = if let Some(function) = compiler.compile() {
+        let (function, stdout, stderr) = compiler.compile();
+        self.stdout = Some(stdout);
+        self.stderr = Some(stderr);
+        let result = if let Some(function) = function {
             native_functions.define_functions(self);
 
             let function_id = self.heap.add_function(function);

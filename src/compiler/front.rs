@@ -3,9 +3,10 @@ use crate::{
     chunk::{CodeOffset, ConstantIndex, OpCode},
     scanner::TokenKind as TK,
     types::Line,
+    vm::Output,
 };
 
-impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
+impl<'scanner, 'heap, STDOUT: Output, STDERR: Output> Compiler<'scanner, 'heap, STDOUT, STDERR> {
     pub(super) fn advance(&mut self) {
         self.previous = std::mem::take(&mut self.current);
         loop {
