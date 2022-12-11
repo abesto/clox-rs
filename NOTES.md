@@ -49,9 +49,6 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * 27/2: `getattr` and `setattr` native functions to access instance fields using a variable as the index
   * Until this point, `Instance::fields` was indexed with a `StringId`. This is fast, and it's OK because only constant strings were usable to access fields, and constant strings are deduplicated in the compiler. Now that field indexes can be constructed at runtime, `Instance::fields` has to index using `String`s. This is slower, but hey, features!
 * 27/3: `delattr`. Also added `hasattr` to help testing.
-* MAYBE: generational GC
-* MAYBE: ternary operator (not super interesting)
-* STRETCH: add error handling to user code
 
 ## Dependencies
 
