@@ -3,8 +3,6 @@ html {
   height: 100%;
   padding: 0;
   margin: 0;
-  font-family: "Lucida Sans", "Lucida Sans Regular", "Lucida Grande",
-    "Lucida Sans Unicode", Geneva, Verdana, sans-serif;
 }
 
 .main-container {
@@ -37,6 +35,8 @@ html {
 .output {
   padding: 15px;
   margin: 0;
+  font-size: 11pt;
+  line-height: 1.1;
 
   .error {
     color: red;
@@ -71,4 +71,9 @@ select {
 
 code {
   white-space: nowrap;
+}
+
+button.help {
+  background-color: #eee;
+  color: black;
 }

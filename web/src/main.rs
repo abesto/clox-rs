@@ -1,3 +1,4 @@
+mod micromodal;
 mod monaco_lox;
 
 use std::sync::Mutex;
@@ -220,13 +221,17 @@ fn app() -> Html {
     let on_stress_gc_clicked = { use_callback(flag_handler!(flags, STRESS_GC), ()) };
     let on_log_gc_clicked = { use_callback(flag_handler!(flags, LOG_GC), ()) };
 
+    // What am I looking at?
+    let open_help = use_callback(|_, _| micromodal::show("help-modal"), ());
+    let close_help = use_callback(|_, _| micromodal::close("help-modal"), ());
+
     html! {
         <div class="main-container">
             <div class="controls">
                 <button onclick={on_run_clicked}>{ "Run (Ctrl/Cmd + Enter)" }</button>
 
                 <Examples onchange={on_example_selected} />
-                <button>{ "What am I looking at?" }</button>
+                <button class="help" onclick={open_help}>{ "What am I looking at?" }</button>
 
                 <Checkbox label="Show Bytecode" onchange={on_show_bytecode_clicked} />
                 <Checkbox label="Trace Execution" onchange={on_trace_clicked} />
@@ -239,6 +244,8 @@ fn app() -> Html {
                 <CloxEditor {on_editor_created} text_model={(*text_model).clone()} />
                 <Output entries={(*output).clone()} />
             </div>
+
+            <Help onclose={close_help} />
         </div>
     }
 }
@@ -348,6 +355,50 @@ pub fn Examples(props: &ExamplesProps) -> Html {
             <option value="closures">{"Closures"}</option>
             <option value="nested_classes">{"Nested Classes"}</option>
         </select>
+    }
+}
+
+#[derive(PartialEq, Properties)]
+pub struct HelpProps {
+    onclose: Callback<()>,
+}
+
+#[function_component]
+pub fn Help(props: &HelpProps) -> Html {
+    let HelpProps { onclose } = props;
+
+    let onclose = onclose.clone();
+    let onclick = use_callback(move |_, _| onclose.emit(()), ());
+
+    let preface = Html::from_html_unchecked(AttrValue::from(include_str!("../help/preface.html")));
+    let notes = Html::from_html_unchecked(AttrValue::from(include_str!("../help/NOTES.html")));
+
+    html! {
+        <div id="help-modal" class="modal" aria-hidden="true">
+          <div tabindex="-1" class="modal__overlay" onclick={onclick.clone()}>
+            <div
+              role="dialog"
+              class="modal__container"
+              aria-modal="true"
+              aria-labelledby="help-modal-title"
+            >
+            <header class="modal__header">
+              <h2 id="help-modal-title" class="modal__title">
+                  <a href="https://github.com/abesto/clox-rs">{"clox-rs (GitHub)"}</a>
+              </h2>
+              <button
+                  aria-label="Close modal"
+                  class="modal__close"
+                  {onclick}
+              />
+            </header>
+            <div class="modal__content" id="help-modal-content">
+                {preface}
+                {notes}
+            </div>
+          </div>
+        </div>
+      </div>
     }
 }
 

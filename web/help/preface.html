@@ -1,0 +1,13 @@
+<p>So this dude called Robert Nystrom wrote a book called <a href="https://craftinginterpreters.com/">Crafting Interpreters</a>. You should totally buy it. It's amazing.</p>
+<p>It walks you through every small piece of creating an interpreter for a small programming language called Lox. The first ~third of the book introduces a tree-walk interpreter in Java. You can check out my Rust version of it at <a href="https://abesto.github.io/jlox-rs/">gh:abesto/jlox-rs</a>.</p>
+<p>What you're now actually looking at is my Rust version of the <em>second</em> part of the book, which writes in C a compiler and VM. In particular, you're staring at:</p>
+<ul>
+<li>A bytecode compiler</li>
+<li>A disassembler for said bytecode (tick &quot;Show Bytecode&quot; and / or &quot;Trace Execution&quot; on the top)</li>
+<li>Manual, safe memory management for the heap using arenas</li>
+<li>Garbage collection for said heap</li>
+<li>A virtual machine that executes the bytecode</li>
+</ul>
+<h2>The Webby Bits</h2>
+<p>This webpage is almost fully built in Rust, using the <a href="https://yew.rs/">yew</a> framework - it's basically React, but in Rust. The editor is <a href="https://microsoft.github.io/monaco-editor/">Monaco</a>, via the <a href="https://github.com/siku2/rust-monaco">rust-monaco</a> bindings. Output is collected via the <a href="https://docs.rs/log/latest/log/"><code>log</code></a> crate in the compiler / VM, and displayed on the right using a custom log formatter. This text is compiled at build time from markdown using <code>pandoc</code> to HTML and included as raw HTML.</p>
+<h2>Notes</h2>

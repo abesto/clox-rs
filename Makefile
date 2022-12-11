@@ -42,10 +42,18 @@ custom-dart-test-both: custom-dart-test custom-dart-test-stress-gc
 test: cargo-test craftinginterpreters-test-both custom-dart-test-both
 
 .PHONY: web
-web: $(sources) $(web_sources)
+web: $(sources) $(web_sources) web/help/NOTES.html web/help/preface.html
 	cd web && trunk build --release --public-url /clox-rs/
 	git add web/dist
 
 .PHONY: web-dev
-web-dev:
+web-dev: web/help/NOTES.html web/help/preface.html
 	cd web && trunk serve --open
+
+web/help/NOTES.html: NOTES.md
+	cmark $< > $@
+	git add $@
+
+web/help/preface.html: web/help/preface.md
+	cmark $< > $@
+	git add $@

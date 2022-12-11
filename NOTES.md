@@ -30,12 +30,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * The initial `Arena` implementation used `Vec`s as the backing store. This falls apart at GC: the "smart pointers" (e.g. `ValueId`) carry around an index into the `Vec`, but GC compresses the `Vec`, and so all smart pointers become invalid. There's probably a smart and efficient way around this. Instead of figuring that out, I switched the backing store to a `HashMap`, plus a storage for free ids (i.e. ones that have been removed before and can now be reused). I later replaced the `HashMap` + free id store with `slotmap::HopSlotMap` for optimization (see below), which effectively implements that smart and efficient way of using a `Vec` as the backing store, but still being correct.
 * Printing of some values like instances and bound methods when NOT running with `--std` is more similar to Python than to Lox (more informative).
 
-# TODO
-
-* Drop the VM stack after we're done interpreting a piece of code. In the REPL, stuff can stay there after runtime errors.
-* Possible optimization: copy-on-write for `Value`s stored in the `Arena`
-
-# Challenges
+## Challenges
 
 * `Chunk::lines` uses run-length encoding
 * `OpCode::ConstantLong` / `OP_CONSTANT_LONG`: support for more than 256 constants
@@ -58,7 +53,7 @@ Things that were hard, and particularly things where I deviate from `clox` prope
 * MAYBE: ternary operator (not super interesting)
 * STRETCH: add error handling to user code
 
-# Dependencies
+## Dependencies
 
 In alphabetical order:
 
@@ -73,11 +68,9 @@ In alphabetical order:
   * It also leads to a fair bit of `.as_ref()` noise, but... maybe it's still worth it?
 * `slotmap`: Fast storage backend for heap arenas.
 
-# Performance
+## Performance
 
-## Methodology
-
-`fib.lox`:
+The test script I used for the benchmarks (`fib.lox`):
 
 ```
 fun fib(n) {
@@ -105,7 +98,7 @@ Summary
     1.79 ± 0.02 times faster than '../jlox-rs/target/release/jlox_rs ./fib.lox'
 ```
 
-## Results / Optimization Steps
+### Results / Optimization Steps
 
 * End of Chapter 24
   * vs [`jlox-rs`](https://github.com/abesto/jlox-rs): 1.79 ± 0.02 times faster 
@@ -116,7 +109,6 @@ Summary
     * Two biggest offenders seems like `Value::clone` (called a lot when reading globals) and `core::ptr::drop_in_place` (executed a lot inside `VM::add` on `*stack_item = (stack_item.as_f64() + *b).into();` for some reason)
 * After switching memory management to an `Arena`: 4.59 ± 0.18 times slower than `clox`
   * Most of the (new) time is spent in `Vec::push` in `Arena::add_value`. CoW would probably help with this a lot.
-
 * End of Chapter 28
   * Performance is really starting to suffer now from the differences in `clox` and `clox-rs` memory management. We're down to being 18.28 ± 0.48 slower, with most of the time being spent in looking up heap values and in GC.
   * Switching the heap to use `HopSlotMap` instead of `HashMap` for data storage gives a significant speed-up, now "only" 11.31 ± 0.44 times slower than `clox`.
@@ -126,6 +118,5 @@ Summary
   * Replacing `slotmap::HopSlotMap` with any of the other `SlotMap` flavors, or `slab::Slab`, or `generational_arena::Arena` significantly decreased performance in this benchmark.
   * Using built-in constants for `true`, `false`, `nil`, and integers 0-1024 gives us a further speedup to 4.74 ± 0.14 times slower than `clox`, since we save a ton of time not doing GC on these values. This is on par with the performance before GC. It's also cheating as this is an optimization technique not used in `clox`, but hey, cheating is technique.
   * Switching from `hashbrown` to `rustc_hash` provides a small speedup, to now 4.15 ± 0.13 times slower than `clox`.
-
 * EOF
- * Catching some bugs in GC unfortunately had a performance overhead; some micro-optimizations minimizing the number of arena lookups during GC gives us the final count: 4.51 ± 0.19 slower than `clox`. I'd be interested in learning how this can be brought closer to the performance of `clox` (without breaking out a whole lot of `unsafe` to manually manage memory). For this project, I'm OK with this result.
+  * Catching some bugs in GC unfortunately had a performance overhead; some micro-optimizations minimizing the number of arena lookups during GC gives us the final count: 4.51 ± 0.19 slower than `clox`. I'd be interested in learning how this can be brought closer to the performance of `clox` (without breaking out a whole lot of `unsafe` to manually manage memory). For this project, I'm OK with this result.

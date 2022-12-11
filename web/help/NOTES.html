@@ -1,0 +1,157 @@
+<p>Things that were hard, and particularly things where I deviate from <code>clox</code> proper.</p>
+<ul>
+<li>Not implementing a custom dynamic array type; let's use <code>Vec</code>. I somewhat expect to run into limitations with that sooner or later as the internals of the array type are exposed in the book, but let's see if that actually happens.</li>
+<li><code>Chunk</code> / <code>OpCode</code> memory layout: initially I wanted to use a <code>#[repr(C, u8)]</code> enum, with operators that have operands encoded as fields of the enum variant. Even in the simplest case, <code>std::mem::size_of</code> said that takes up 16 bytes. That is WAY too much, so we'll do the same kind of tight, manual packing that the C implementation uses.</li>
+<li><code>debug.rs</code>: implemented the <code>disassemble*</code> functions as <code>impl Debug for Chunk</code>. An implication of this is that all <code>Chunk</code>s store a <code>name</code>, which is probably a good idea anyway.
+<ul>
+<li><code>Debug</code> for specific instructions is implemented with a helper struct <code>InstructionDisassembler</code> that wraps a <code>Chunk</code> reference and an offset. This also allows fully consistent formatting from <code>Chunk::debug</code> and execution tracing.</li>
+<li>Serialization of the opcodes is exactly as seen in the C version, even though the specific strings don't actually map exactly to our code (i.e. <code>OP_NIL</code> instead of <code>OpCode::Nil</code>). This is to stay compatible with the books output; plus, I like the aesthetic!</li>
+</ul>
+</li>
+<li>Translating stored pointers and pointer operations to Rust is always interesting:
+<ul>
+<li><code>(int)(vm.ip - vm.chunk-&gt;code)</code> has no translation into Rust. I tried making <code>VM::ip</code> an iterator over <code>(code_offset, instruction)</code>, but that leads to lifetime nightmares. For now we go with a simple index here.</li>
+<li><code>Token</code>s store the &quot;pointer&quot; to the lexeme as a slice.</li>
+<li><code>CallFrame::slots</code> is a <code>Value*</code> in C; a direct translation would be a slice into <code>VM::stack</code>, but I can't easily sort out the lifetimes there. So: simple index again! I keep wondering about the performance.</li>
+</ul>
+</li>
+<li><code>#define</code>-controlled features initially translated to Cargo features; after the third one I switched them to command-line arguments to simplify my life and save time on recompiling. The values are stored in global atomic bools in <code>config.rs</code>.
+<ul>
+<li>A notable flag is <code>--std</code> that disables all non-standard behavior; in this mode, <code>clox-rs</code> passes the original <code>clox</code> test suite.</li>
+<li>Doing anything at runtime instead of compile time obviously has some overhead. For this toy project, I'll take the added convenience of not having to recompile, as long as profiling doesn't say checking one of these flags adds significant overhead. (Yes, anything that reads one of the flags on a hot path caches the value so it doesn't trigger an atomic read each time)</li>
+</ul>
+</li>
+<li><code>VM::binary_op</code> is a higher-order function instead of a macro; hopefully this will be good enough later on.</li>
+<li>Unlike <a href="https://github.com/abesto/jlox-rs/"><code>jlox-rs</code></a>, error reporting on initial implementation follows closely the error reporting logic of the book so that I have less to mentally juggle. Might end up refactoring afterwards to use <code>Result</code>s.</li>
+<li><code>Scanner</code>: the <code>start</code> / <code>current</code> pointer pair is implemented with indices and slices. Using iterators <em>may</em> be more performant, and there may be a way to do that, but timed out on it for now.</li>
+<li>The Pratt parser table creation is a bit of a mess due to 1. constraints on array initialization and 2. lifetimes. We create a new instance of the table for each <code>Compiler</code> instance, because the compiler instance has a lifetime, and its associated methods capture that lifetime, and so the function references must also capture that same lifetime.</li>
+<li>There's a lot of <code>self.previous.as_ref().unwrap()</code> in <code>Compiler</code>. There should be a way to get rid of those <code>Option</code>s. I think.</li>
+<li>By chapter 19, the book is making a lot of forward references to a garbage collector. While that sounds exciting, I think... we won't... need it? Because the Rust memory management structures we use (basically, <code>Box</code> / <code>String</code> + <code>Drop</code>) ensure we never leak memory? Except, this will probably get a ton more complicated the moment we start in on variables and classes. Let's see what happens.</li>
+<li>Completely skipped chapter 20 (Hash Tables) because we have them in Rust (also mostly skipped the part where we rebuild <code>Box</code>).</li>
+<li><code>StackFrame::function</code> is a pointer to an <code>ObjFunction</code> in C. In Rust, we can't &quot;just&quot; stuff in a pointer. At a first approximation, I'll use <code>Rc&lt;RefCell&gt;</code> for storing <code>Function</code> instances. I considered <code>Weak</code> for storage in <code>CallFrame</code>s, but it doesn't really give any performance improvements I think (they need to be <code>updrade</code>ed when used <em>anyway</em>).</li>
+<li>The book handles the stack of compilers with an explicit linked list, and lets globals implicitly take care of shared state. This obviously doesn't translate directly to Rust, so:
+<ul>
+<li>Initially I used the Rust call stack to handle the compiler stack, and explicitly copied the &quot;shared&quot; state into / out of the sub-compiler. This breaks down at closures, where the nested compiler needs to access some of the state of the enclosing compiler.</li>
+<li>Then I tried representing the shared state in an <code>Rc&lt;RefCell&lt;SharedCompilerState&gt;&gt;</code>, and nesting compiler instances that carry their own &quot;private&quot; state. This still doesn't actually provide a solution to &quot;how do nested compilers access their enclosing compiler&quot;.</li>
+<li>Finally: I completely dropped the idea of a stack of compiler instances. I have just the one compiler, with a stack of nestable <em>states</em> managed explicitly.</li>
+</ul>
+</li>
+<li>The book stores the list of open <code>Upvalue</code>s in a poor man's linked list. Rust has a <code>LinkedList</code> in its stdlib, but it doesn't expose a way to insert an item in the middle in O(1) time given a pointer at an item. <a href="https://github.com/rust-lang/rust/issues/58533">https://github.com/rust-lang/rust/issues/58533</a> tracks adding a <code>Cursor</code> API that would enable this. The book also makes an argument that this is not <em>quite</em> performance critical. Instead of trying to implement a half-assed linked list in Rust (which is known to be hard), I'll just throw a <code>VecDeque</code> at this. We'll store <code>ValueId</code>s, so we get pointer-like semantics in that we'll point at the same single instance of the value (i.e. variable vs value).</li>
+<li>The book stores closed <code>Upvalue</code>s with some neat pointer trickery. We can't follow there; instead, <code>Upvalue</code> is now an enum with an <code>Open(usize)</code> and a <code>Closed(ValueId)</code> variant.</li>
+<li>The book makes GC decisions (at least of the stress-testing kind) whenever memory is allocated. Our direct translation would be the <code>Arena::add_*</code> methods, but lifetimes make injecting roots there tricky. Instead in <code>clox-rs</code> GC is (potentially) triggered between the execution of each instruction.</li>
+<li>The initial <code>Arena</code> implementation used <code>Vec</code>s as the backing store. This falls apart at GC: the &quot;smart pointers&quot; (e.g. <code>ValueId</code>) carry around an index into the <code>Vec</code>, but GC compresses the <code>Vec</code>, and so all smart pointers become invalid. There's probably a smart and efficient way around this. Instead of figuring that out, I switched the backing store to a <code>HashMap</code>, plus a storage for free ids (i.e. ones that have been removed before and can now be reused). I later replaced the <code>HashMap</code> + free id store with <code>slotmap::HopSlotMap</code> for optimization (see below), which effectively implements that smart and efficient way of using a <code>Vec</code> as the backing store, but still being correct.</li>
+<li>Printing of some values like instances and bound methods when NOT running with <code>--std</code> is more similar to Python than to Lox (more informative).</li>
+</ul>
+<h2>Challenges</h2>
+<ul>
+<li><code>Chunk::lines</code> uses run-length encoding</li>
+<li><code>OpCode::ConstantLong</code> / <code>OP_CONSTANT_LONG</code>: support for more than 256 constants
+<ul>
+<li>Also added <code>OpCode::DefineGlobalLong</code>, <code>OpCode::GetGlobalLong</code>, <code>OpCode::SetGlobalLong</code>.</li>
+</ul>
+</li>
+<li>Optimized negation to mutate the stack value in place, for about a 1.22x speedup. Also did the same for binary operations; strangely, addition (the only one I tested) only sped up by about 1.02x, if that (significant of noise on the measurement).</li>
+<li>21/1: Don't add global name to constant table each time a global is accessed (name -&gt; constant index hashtable in compiler)</li>
+<li>22/3: <code>const</code> keyword marks variables immutable, can only be assigned in the declaration statement.</li>
+<li>22/4: Allow more than 256 local variables in scope at a time.</li>
+<li>23/1: <code>switch</code> statements.</li>
+<li>23/3: <code>continue</code> statements. Made a naive implementation, got confused about scopes and missed some edge cases; ported the solution from the book repo.</li>
+<li>24/1: arity check on native functions</li>
+<li>24/3: native functions can report runtime errors</li>
+<li>25/2: alias loop variables for the loop body</li>
+<li>26/2: skip flipping <code>marked</code> bit on each object at GC end</li>
+<li>27/1: reading an undefined field returns <code>nil</code></li>
+<li>27/2: <code>getattr</code> and <code>setattr</code> native functions to access instance fields using a variable as the index
+<ul>
+<li>Until this point, <code>Instance::fields</code> was indexed with a <code>StringId</code>. This is fast, and it's OK because only constant strings were usable to access fields, and constant strings are deduplicated in the compiler. Now that field indexes can be constructed at runtime, <code>Instance::fields</code> has to index using <code>String</code>s. This is slower, but hey, features!</li>
+</ul>
+</li>
+<li>27/3: <code>delattr</code>. Also added <code>hasattr</code> to help testing.</li>
+<li>MAYBE: generational GC</li>
+<li>MAYBE: ternary operator (not super interesting)</li>
+<li>STRETCH: add error handling to user code</li>
+</ul>
+<h2>Dependencies</h2>
+<p>In alphabetical order:</p>
+<ul>
+<li><code>clap</code>: Because manually parsing arguments is not fun</li>
+<li><code>derivative</code>: Mostly to ignore some fields of structs in derived comparison implementations</li>
+<li><code>humansize</code>: To output nice memory sizes under <code>--log-gc</code></li>
+<li><code>num_enum</code>: More safely and conveniently convert between the <code>u8</code> of byte-code and <code>OpCode</code>s</li>
+<li><code>paste</code>: For macro goodness</li>
+<li><code>rustc-hash</code>: Fast hashmaps everywhere. In a production language you'd probably want a cryptographically safer hashmap implementation.</li>
+<li><code>shrinkwraprs</code>: We use <code>u8</code> / <code>usize</code> for a ton of different meanings. Would be good to not mix them up. This helps with that. Currently only really used by <code>chunk.rs</code>.
+<ul>
+<li>If used incorrectly it'll likely have a pretty bad performance impact, but: first make it correct, then make it fast.</li>
+<li>It also leads to a fair bit of <code>.as_ref()</code> noise, but... maybe it's still worth it?</li>
+</ul>
+</li>
+<li><code>slotmap</code>: Fast storage backend for heap arenas.</li>
+</ul>
+<h2>Performance</h2>
+<p>The test script I used for the benchmarks (<code>fib.lox</code>):</p>
+<pre><code>fun fib(n) {
+    if (n &lt; 2) return n;
+    return fib(n - 1) + fib(n - 2);
+}
+
+print fib(30);
+</code></pre>
+<p>Example run:</p>
+<pre><code>abesto@localhost:~/clox-rs$ hyperfine --warmup 1 '../jlox-rs/target/release/jlox_rs ./fib.lox' './target/release/clox-rs ./fib.lox'
+Benchmark 1: ../jlox-rs/target/release/jlox_rs ./fib.lox
+  Time (mean ± σ):      2.001 s ±  0.016 s    [User: 1.996 s, System: 0.001 s]
+  Range (min … max):    1.980 s …  2.022 s    10 runs
+ 
+Benchmark 2: ./target/release/clox-rs ./fib.lox
+  Time (mean ± σ):      1.119 s ±  0.011 s    [User: 1.115 s, System: 0.002 s]
+  Range (min … max):    1.104 s …  1.141 s    10 runs
+ 
+Summary
+  './target/release/clox-rs ./fib.lox' ran
+    1.79 ± 0.02 times faster than '../jlox-rs/target/release/jlox_rs ./fib.lox'
+</code></pre>
+<h3>Results / Optimization Steps</h3>
+<ul>
+<li>End of Chapter 24
+<ul>
+<li>vs <a href="https://github.com/abesto/jlox-rs"><code>jlox-rs</code></a>: 1.79 ± 0.02 times faster</li>
+<li>vs <code>clox</code> proper: 8.14 ± 0.11 times slower</li>
+</ul>
+</li>
+<li>After a basic optimization pass
+<ul>
+<li>vs <a href="https://github.com/abesto/jlox-rs"><code>jlox-rs</code></a>: 4.39 ± 0.07 times faster</li>
+<li>vs <code>clox</code> proper: 3.32 ± 0.07 times slower
+<ul>
+<li>Two biggest offenders seems like <code>Value::clone</code> (called a lot when reading globals) and <code>core::ptr::drop_in_place</code> (executed a lot inside <code>VM::add</code> on <code>*stack_item = (stack_item.as_f64() + *b).into();</code> for some reason)</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>After switching memory management to an <code>Arena</code>: 4.59 ± 0.18 times slower than <code>clox</code>
+<ul>
+<li>Most of the (new) time is spent in <code>Vec::push</code> in <code>Arena::add_value</code>. CoW would probably help with this a lot.</li>
+</ul>
+</li>
+<li>End of Chapter 28
+<ul>
+<li>Performance is really starting to suffer now from the differences in <code>clox</code> and <code>clox-rs</code> memory management. We're down to being 18.28 ± 0.48 slower, with most of the time being spent in looking up heap values and in GC.</li>
+<li>Switching the heap to use <code>HopSlotMap</code> instead of <code>HashMap</code> for data storage gives a significant speed-up, now &quot;only&quot; 11.31 ± 0.44 times slower than <code>clox</code>.</li>
+<li>Further benchmarking and optimizations got it down to 8.38 ± 0.47 times slower than <code>clox</code>.
+<ul>
+<li>The main change was caching the current function / closure in <code>VM</code> instead of looking it up from the last call frame on each <code>read_byte()</code> call.</li>
+</ul>
+</li>
+<li>Interestingly, using specialized key types with <code>slotmap::new_key_type</code> further increased performance, now to 6.78 ± 0.42 times slower than <code>clox</code>.</li>
+<li>Replacing <code>slotmap::HopSlotMap</code> with any of the other <code>SlotMap</code> flavors, or <code>slab::Slab</code>, or <code>generational_arena::Arena</code> significantly decreased performance in this benchmark.</li>
+<li>Using built-in constants for <code>true</code>, <code>false</code>, <code>nil</code>, and integers 0-1024 gives us a further speedup to 4.74 ± 0.14 times slower than <code>clox</code>, since we save a ton of time not doing GC on these values. This is on par with the performance before GC. It's also cheating as this is an optimization technique not used in <code>clox</code>, but hey, cheating is technique.</li>
+<li>Switching from <code>hashbrown</code> to <code>rustc_hash</code> provides a small speedup, to now 4.15 ± 0.13 times slower than <code>clox</code>.</li>
+</ul>
+</li>
+<li>EOF
+<ul>
+<li>Catching some bugs in GC unfortunately had a performance overhead; some micro-optimizations minimizing the number of arena lookups during GC gives us the final count: 4.51 ± 0.19 slower than <code>clox</code>. I'd be interested in learning how this can be brought closer to the performance of <code>clox</code> (without breaking out a whole lot of <code>unsafe</code> to manually manage memory). For this project, I'm OK with this result.</li>
+</ul>
+</li>
+</ul>
