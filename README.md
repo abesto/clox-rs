@@ -4,7 +4,7 @@
 
 Status: done!
 
-In-browser version coming soon.
+Check it out running in your browser: https://abesto.github.io/clox-rs/
 
 Check out [`NOTES.md`](NOTES.md) for a ton of details, especially around differences vs. `clox` as a result of using Rust.
 
