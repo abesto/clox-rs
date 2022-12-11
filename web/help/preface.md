@@ -12,6 +12,6 @@ What you're now actually looking at is my Rust version of the *second* part of t
 
 ## The Webby Bits
 
-This webpage is almost fully built in Rust, using the [yew](https://yew.rs/) framework - it's basically React, but in Rust. The editor is [Monaco](https://microsoft.github.io/monaco-editor/), via the [rust-monaco](https://github.com/siku2/rust-monaco) bindings. Output is collected via the [`log`](https://docs.rs/log/latest/log/) crate in the compiler / VM, and displayed on the right using a custom log formatter. This text is compiled at build time from markdown using `pandoc` to HTML and included as raw HTML.
+This webpage is almost fully built in Rust, using the [yew](https://yew.rs/) framework - it's basically React, but in Rust. The editor is [Monaco](https://microsoft.github.io/monaco-editor/), via the [rust-monaco](https://github.com/siku2/rust-monaco) bindings. Output is collected via the [`log`](https://docs.rs/log/latest/log/) crate in the compiler / VM, and displayed on the right using a custom log formatter. This text is compiled at build time from markdown using `cmark` to HTML and included as raw HTML.
 
 ## Notes

@@ -9,5 +9,5 @@
 <li>A virtual machine that executes the bytecode</li>
 </ul>
 <h2>The Webby Bits</h2>
-<p>This webpage is almost fully built in Rust, using the <a href="https://yew.rs/">yew</a> framework - it's basically React, but in Rust. The editor is <a href="https://microsoft.github.io/monaco-editor/">Monaco</a>, via the <a href="https://github.com/siku2/rust-monaco">rust-monaco</a> bindings. Output is collected via the <a href="https://docs.rs/log/latest/log/"><code>log</code></a> crate in the compiler / VM, and displayed on the right using a custom log formatter. This text is compiled at build time from markdown using <code>pandoc</code> to HTML and included as raw HTML.</p>
+<p>This webpage is almost fully built in Rust, using the <a href="https://yew.rs/">yew</a> framework - it's basically React, but in Rust. The editor is <a href="https://microsoft.github.io/monaco-editor/">Monaco</a>, via the <a href="https://github.com/siku2/rust-monaco">rust-monaco</a> bindings. Output is collected via the <a href="https://docs.rs/log/latest/log/"><code>log</code></a> crate in the compiler / VM, and displayed on the right using a custom log formatter. This text is compiled at build time from markdown using <code>cmark</code> to HTML and included as raw HTML.</p>
 <h2>Notes</h2>
