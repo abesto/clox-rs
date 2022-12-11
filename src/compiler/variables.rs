@@ -4,13 +4,12 @@ use crate::{
     chunk::{ConstantLongIndex, OpCode},
     config,
     heap::StringId,
-    vm::Output,
 };
 
 use super::{Compiler, Local, ScopeDepth, Upvalue};
 use crate::scanner::{Token, TokenKind as TK};
 
-impl<'scanner, 'heap, STDOUT: Output, STDERR: Output> Compiler<'scanner, 'heap, STDOUT, STDERR> {
+impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
     pub(super) fn begin_scope(&mut self) {
         **self.scope_depth_mut() += 1;
     }

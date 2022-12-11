@@ -2,7 +2,6 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::chunk::OpCode;
 use crate::scanner::TokenKind as TK;
-use crate::vm::Output;
 
 use super::Compiler;
 
@@ -22,19 +21,16 @@ pub(super) enum Precedence {
     Primary,
 }
 
-type ParseFn<'scanner, 'heap, STDOUT, STDERR> =
-    fn(&mut Compiler<'scanner, 'heap, STDOUT, STDERR>, bool) -> ();
+type ParseFn<'scanner, 'arena> = fn(&mut Compiler<'scanner, 'arena>, bool) -> ();
 
 #[derive(Clone)]
-pub(super) struct Rule<'scanner, 'heap, STDOUT: Output, STDERR: Output> {
-    prefix: Option<ParseFn<'scanner, 'heap, STDOUT, STDERR>>,
-    infix: Option<ParseFn<'scanner, 'heap, STDOUT, STDERR>>,
+pub(super) struct Rule<'scanner, 'arena> {
+    prefix: Option<ParseFn<'scanner, 'arena>>,
+    infix: Option<ParseFn<'scanner, 'arena>>,
     precedence: Precedence,
 }
 
-impl<'scanner, 'heap, STDOUT: Output, STDERR: Output> Default
-    for Rule<'scanner, 'heap, STDOUT, STDERR>
-{
+impl<'scanner, 'arena> Default for Rule<'scanner, 'arena> {
     fn default() -> Self {
         Self {
             prefix: Default::default(),
@@ -63,12 +59,11 @@ macro_rules! make_rules {
     }};
 }
 
-pub(super) type Rules<'scanner, 'heap, STDOUT, STDERR> =
-    [Rule<'scanner, 'heap, STDOUT, STDERR>; 46];
+pub(super) type Rules<'scanner, 'arena> = [Rule<'scanner, 'arena>; 46];
 
 // Can't be a static value because the associated function types include lifetimes
 #[rustfmt::skip]
-pub(super) fn make_rules<'scanner, 'heap, STDOUT: Output, STDERR: Output>() -> Rules<'scanner, 'heap, STDOUT, STDERR> {
+pub(super) fn make_rules<'scanner, 'arena>() -> Rules<'scanner, 'arena> {
     make_rules!(
         LeftParen    = [grouping, call,   Call],
         RightParen   = [None,     None,   None],
@@ -119,8 +114,8 @@ pub(super) fn make_rules<'scanner, 'heap, STDOUT: Output, STDERR: Output>() -> R
     )
 }
 
-impl<'scanner, 'heap, STDOUT: Output, STDERR: Output> Compiler<'scanner, 'heap, STDOUT, STDERR> {
-    fn get_rule(&self, operator: TK) -> &Rule<'scanner, 'heap, STDOUT, STDERR> {
+impl<'scanner, 'arena> Compiler<'scanner, 'arena> {
+    fn get_rule(&self, operator: TK) -> &Rule<'scanner, 'arena> {
         &self.rules[operator as usize]
     }
 

@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use std::pin::Pin;
 
+use log::{debug, error, info};
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::chunk::InstructionDisassembler;
@@ -16,10 +17,7 @@ use crate::{
     value::{NativeFunction, NativeFunctionImpl, Value},
 };
 
-pub trait Output: std::io::Write {}
-impl<T> Output for T where T: std::io::Write {}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum InterpretResult {
     Ok,
@@ -29,13 +27,10 @@ pub enum InterpretResult {
 
 macro_rules! runtime_error {
     ($self:ident, $($arg:expr),* $(,)?) => {
-        writeln!($self.stderr(), $($arg),*).unwrap();
-        let backtrace = $self.callstack.iter().rev().map(|frame| {
+        error!($($arg),*);
+        for frame in $self.callstack.iter().rev() {
             let line = frame.closure().function.chunk.get_line(&CodeOffset(frame.ip - 1));
-            format!("[line {}] in {}", *line, *frame.closure().function.name)
-        }).collect::<Vec<_>>();
-        for line in backtrace {
-            writeln!($self.stderr(), "{line}").unwrap();
+            error!("[line {}] in {}", *line, *frame.closure().function.name);
         }
     };
 }
@@ -135,56 +130,24 @@ impl CallStack {
     }
 }
 
-pub struct VM<STDOUT: Output, STDERR: Output> {
+pub struct VM {
     heap: Pin<Box<Heap>>,
     callstack: CallStack,
     stack: Vec<ValueId>,
     globals: HashMap<StringId, Global>,
     open_upvalues: VecDeque<ValueId>,
-    stdout: Option<STDOUT>,
-    stderr: Option<STDERR>,
 }
 
-impl VM<std::io::Stdout, std::io::Stderr> {
+impl VM {
     #[must_use]
     pub fn new() -> Self {
-        Self::with_streams(std::io::stdout(), std::io::stderr())
-    }
-}
-
-impl<STDOUT, STDERR> VM<STDOUT, STDERR>
-where
-    STDOUT: Output,
-    STDERR: Output,
-{
-    #[must_use]
-    pub fn with_streams(stdout: STDOUT, stderr: STDERR) -> Self {
         Self {
             heap: Heap::new(),
             callstack: CallStack::new(),
             stack: Vec::with_capacity(crate::config::STACK_MAX),
             globals: HashMap::default(),
             open_upvalues: VecDeque::new(),
-            // The streams will be `None` only and exactly while we delegate work to `Compiler`.
-            // This could be made safer by using `Rc<RefCell>>` instead, but it doesn't seem like
-            // the performance overhead is justified.
-            stdout: Some(stdout),
-            stderr: Some(stderr),
         }
-    }
-
-    // Used in `web`, silence warnings when compiling without `web`
-    #[allow(dead_code)]
-    pub fn into_streams(self) -> (STDOUT, STDERR) {
-        (self.stdout.unwrap(), self.stderr.unwrap())
-    }
-
-    fn stdout(&mut self) -> &mut STDOUT {
-        self.stdout.as_mut().unwrap()
-    }
-
-    fn stderr(&mut self) -> &mut STDERR {
-        self.stderr.as_mut().unwrap()
     }
 
     pub fn interpret(&mut self, source: &[u8]) -> InterpretResult {
@@ -192,18 +155,10 @@ where
 
         let mut native_functions = NativeFunctions::new();
         native_functions.create_names(&mut self.heap);
-        let mut compiler = Compiler::new(
-            scanner,
-            &mut self.heap,
-            std::mem::take(&mut self.stdout).unwrap(),
-            std::mem::take(&mut self.stderr).unwrap(),
-        );
+        let mut compiler = Compiler::new(scanner, &mut self.heap);
         native_functions.register_names(&mut compiler);
 
-        let (function, stdout, stderr) = compiler.compile();
-        self.stdout = Some(stdout);
-        self.stderr = Some(stderr);
-        let result = if let Some(function) = function {
+        let result = if let Some(function) = compiler.compile() {
             native_functions.define_functions(self);
 
             let function_id = self.heap.add_function(function);
@@ -231,20 +186,23 @@ where
                 let function = &self.callstack.function();
                 let mut disassembler = InstructionDisassembler::new(&function.chunk);
                 *disassembler.offset = self.callstack.current().ip;
-                let stack_str = self
-                    .stack
-                    .iter()
-                    .map(|v| format!("{}", self.heap.values[v]))
-                    .collect::<Vec<_>>()
-                    .join(" ][ ");
-                writeln!(self.stdout(), "          [ {stack_str} ]",).unwrap();
-                write!(self.stdout(), "{:?}", disassembler).unwrap();
+                debug!(
+                    "          [ {} ]",
+                    self.stack
+                        .iter()
+                        .map(|v| format!("{}", self.heap.values[v]))
+                        .collect::<Vec<_>>()
+                        .join(" ][ ")
+                );
+                debug!("{:?}", disassembler);
             }
             self.collect_garbage(stress_gc);
             match OpCode::try_from(self.read_byte()).expect("Internal error: unrecognized opcode") {
                 OpCode::Print => {
-                    let item = &*self.stack.pop().expect("stack underflow in OP_PRINT");
-                    writeln!(self.stdout(), "{item}",).unwrap();
+                    info!(
+                        "{}",
+                        *self.stack.pop().expect("stack underflow in OP_PRINT")
+                    );
                 }
                 OpCode::Pop => {
                     self.stack.pop().expect("stack underflow in OP_POP");
@@ -322,14 +280,6 @@ where
                                 .push((*self.callstack.closure()).as_closure().upvalues[index]);
                         }
                     }
-
-                    /*
-                    eprint!("{} {} ", *closure.function.name, closure.upvalue_count);
-                    for v in &closure.upvalues {
-                        eprint!("{} ", v.upvalue_location().as_open());
-                    }
-                    eprintln!();
-                    */
 
                     let closure_id = self.heap.add_value(Value::from(closure));
                     self.stack_push(closure_id);
@@ -419,11 +369,11 @@ where
                             if std_mode {
                                 runtime_error!(self, "Only instances have properties.");
                             } else {
-                                let field = self.heap.strings[&field].clone();
-                                let x = x.clone();
                                 runtime_error!(
                                     self,
-                                    "Tried to get property '{field}' of non-instance `{x}`.",
+                                    "Tried to get property '{}' of non-instance `{}`.",
+                                    *field,
+                                    x
                                 );
                             }
                             return InterpretResult::RuntimeError;
@@ -453,11 +403,11 @@ where
                             if std_mode {
                                 runtime_error!(self, "Only instances have fields.");
                             } else {
-                                let field = field.clone();
-                                let x = x.clone();
                                 runtime_error!(
                                     self,
-                                    "Tried to set property '{field}' of non-instance `{x}`.",
+                                    "Tried to set property '{}' of non-instance `{}`.",
+                                    field,
+                                    x
                                 );
                             }
                             return InterpretResult::RuntimeError;
@@ -569,14 +519,14 @@ where
             if config::STD_MODE.load() {
                 runtime_error!(self, "Operands must be two numbers or two strings.");
             } else {
-                let operands = self.stack[slice_start..]
-                    .iter()
-                    .map(|v| format!("{}", self.heap.values[v]))
-                    .collect::<Vec<_>>()
-                    .join(", ");
                 runtime_error!(
                     self,
-                    "Operands must be two numbers or two strings. Got: [{operands}]",
+                    "Operands must be two numbers or two strings. Got: [{}]",
+                    self.stack[slice_start..]
+                        .iter()
+                        .map(|v| format!("{}", self.heap.values[v]))
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 );
             }
             return Some(InterpretResult::RuntimeError);
@@ -734,8 +684,7 @@ where
             Value::String(name) => match self.globals.get(name) {
                 Some(global) => self.stack_push(global.value),
                 None => {
-                    let variable = self.heap.strings[name].clone();
-                    runtime_error!(self, "Undefined variable '{variable}'.");
+                    runtime_error!(self, "Undefined variable '{}'.", self.heap.strings[name]);
                     return Some(InterpretResult::RuntimeError);
                 }
             },
@@ -873,13 +822,11 @@ where
     }
 
     fn call_value(&mut self, callee: ValueId, arg_count: u8) -> bool {
-        // eprintln!("call_value {}", *callee);
+        // error!("call_value {}", *callee);
         match &self.heap.values[&callee] {
             Value::Closure(_) => self.execute_call(callee, arg_count),
             Value::NativeFunction(NativeFunction { fun, arity, name }) => {
                 if arg_count != *arity {
-                    let arity = *arity;
-                    let name = name.clone();
                     runtime_error!(
                         self,
                         "Native function '{}' expected {} arguments, got {}.",
@@ -937,8 +884,7 @@ where
 
     fn invoke_from_class(&mut self, class: ValueId, method_name: StringId, arg_count: u8) -> bool {
         let Some(method) = class.as_class().methods.get(&method_name) else {
-            let property = self.heap.strings[&method_name].clone();
-            runtime_error!(self, "Undefined property '{property}'.");
+            runtime_error!(self, "Undefined property '{}'.", self.heap.strings[&method_name]);
             return false;
         };
         self.execute_call(*method, arg_count)
@@ -948,7 +894,7 @@ where
         let receiver = self
             .peek(arg_count.into())
             .expect("Stack underflow in OP_INVOKE");
-        //eprintln!("invoke {}.{}", **receiver, *method_name);
+        //error!("invoke {}.{}", **receiver, *method_name);
         if let Value::Instance(instance) = &self.heap.values[receiver] {
             if let Some(value) = instance.fields.get(&self.heap.strings[&method_name]) {
                 let new_stack_base = self.stack.len() - usize::from(arg_count) - 1;
@@ -999,7 +945,7 @@ where
         self.open_upvalues.insert(upvalue_index, upvalue_id);
 
         /*
-        eprintln!(
+        error!(
             "inserted {} at {} -> {}",
             local,
             upvalue_index,
@@ -1024,7 +970,7 @@ where
             let mut upvalue = self.open_upvalues.pop_front().unwrap();
             debug_assert!(matches!(*upvalue, Value::Upvalue(_)));
             /*
-            eprintln!(
+            error!(
                 "Closing stack index {} >= {}",
                 upvalue.upvalue_location().as_open(),
                 last

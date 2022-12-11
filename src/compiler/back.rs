@@ -2,12 +2,11 @@ use crate::{
     chunk::{CodeOffset, OpCode},
     scanner::{Token, TokenKind},
     value::Value,
-    vm::Output,
 };
 
 use super::{Compiler, FunctionType};
 
-impl<'scanner, 'heap, STDOUT: Output, STDERR: Output> Compiler<'scanner, 'heap, STDOUT, STDERR> {
+impl<'scanner, 'heap> Compiler<'scanner, 'heap> {
     pub(super) fn emit_byte<T>(&mut self, byte: T)
     where
         T: Into<u8>,

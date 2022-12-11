@@ -36,16 +36,13 @@ html {
 
 .output {
   padding: 15px;
-  display: flex;
-  flex-direction: column;
+  margin: 0;
 
-  pre {
-    margin: 0;
-  }
-
-  .stderr,
-  .status {
+  .error {
     color: red;
+  }
+  .debug {
+    color: gray;
   }
 }
 

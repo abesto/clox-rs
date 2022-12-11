@@ -1,3 +1,4 @@
+use log::{error, info, Level, LevelFilter, Metadata, Record};
 use std::{io::Write, path::PathBuf};
 
 use clap::Parser;
@@ -16,6 +17,25 @@ mod scanner;
 mod types;
 mod value;
 mod vm;
+
+struct Logger;
+
+impl log::Log for Logger {
+    fn enabled(&self, _metadata: &Metadata) -> bool {
+        true
+    }
+
+    fn log(&self, record: &Record) {
+        if record.level() <= Level::Warn {
+            eprintln!("{}", record.args());
+        } else {
+            println!("{}", record.args());
+        }
+    }
+
+    fn flush(&self) {}
+}
+static LOGGER: Logger = Logger;
 
 #[derive(Parser, Debug)]
 #[command(version)]
@@ -40,6 +60,10 @@ struct Args {
 }
 
 fn main() {
+    log::set_logger(&LOGGER)
+        .map(|()| log::set_max_level(LevelFilter::Debug))
+        .unwrap();
+
     let args = Args::parse();
 
     config::STD_MODE.store(args.std);
@@ -64,7 +88,7 @@ fn repl() {
         if std::io::stdin().read_line(&mut line).unwrap() > 0 {
             vm.interpret(line.as_bytes());
         } else {
-            println!();
+            info!("");
             break;
         }
     }
@@ -73,7 +97,7 @@ fn repl() {
 fn run_file(file: PathBuf) {
     match std::fs::read(file) {
         Err(e) => {
-            eprintln!("{}", e);
+            error!("{}", e);
             std::process::exit(74);
         }
         Ok(contents) => {

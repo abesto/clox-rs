@@ -201,7 +201,7 @@ impl std::fmt::Debug for Chunk {
         writeln!(f, "== {} ==", *self.name)?;
         let mut disassembler = InstructionDisassembler::new(self);
         while disassembler.offset.as_ref() < &self.code.len() {
-            write!(f, "{:?}", disassembler)?;
+            writeln!(f, "{:?}", disassembler)?;
             *disassembler.offset += disassembler.instruction_len(*disassembler.offset);
         }
         Ok(())
@@ -260,7 +260,7 @@ impl<'chunk> InstructionDisassembler<'chunk> {
     ) -> std::fmt::Result {
         let constant_index = ConstantIndex(self.chunk.code()[offset.as_ref() + 1]);
         write!(f, "{:-16} {:>4}", name, *constant_index,)?;
-        writeln!(
+        write!(
             f,
             " '{}'",
             **self.chunk.get_constant(*constant_index.as_ref())
@@ -279,7 +279,7 @@ impl<'chunk> InstructionDisassembler<'chunk> {
                 + (usize::from(code[offset.as_ref() + 2]) << 8)
                 + (usize::from(code[offset.as_ref() + 3])),
         );
-        writeln!(
+        write!(
             f,
             "{:-16} {:>4} '{}'",
             name,
@@ -294,7 +294,7 @@ impl<'chunk> InstructionDisassembler<'chunk> {
         name: &str,
         _offset: &CodeOffset,
     ) -> std::fmt::Result {
-        writeln!(f, "{}", name)
+        write!(f, "{}", name)
     }
 
     fn debug_byte_opcode(
@@ -304,7 +304,7 @@ impl<'chunk> InstructionDisassembler<'chunk> {
         offset: &CodeOffset,
     ) -> std::fmt::Result {
         let slot = self.chunk.code[**offset + 1];
-        writeln!(f, "{:-16} {:>4}", name, slot)
+        write!(f, "{:-16} {:>4}", name, slot)
     }
 
     fn debug_byte_long_opcode(
@@ -317,7 +317,7 @@ impl<'chunk> InstructionDisassembler<'chunk> {
         let slot = (usize::from(code[offset.as_ref() + 1]) << 16)
             + (usize::from(code[offset.as_ref() + 2]) << 8)
             + (usize::from(code[offset.as_ref() + 3]));
-        writeln!(f, "{:-16} {:>4}", name, slot)
+        write!(f, "{:-16} {:>4}", name, slot)
     }
 
     fn debug_jump_opcode(
@@ -335,7 +335,7 @@ impl<'chunk> InstructionDisassembler<'chunk> {
         } else {
             target + jump
         };
-        writeln!(f, "{:-16} {:>4} -> {}", name, **offset, target)
+        write!(f, "{:-16} {:>4} -> {}", name, **offset, target)
     }
 
     fn debug_closure_opcode(
@@ -347,15 +347,13 @@ impl<'chunk> InstructionDisassembler<'chunk> {
         let mut offset = **offset + 1;
 
         let code = self.chunk.code();
-        //eprintln!("{:?}", &code[offset..]);
         let constant = code[offset];
         offset += 1;
 
         let value = &**self.chunk.get_constant(constant);
-        writeln!(f, "{:-16} {:>4} {}", name, constant, value)?;
+        write!(f, "{:-16} {:>4} {}", name, constant, value)?;
 
         let function = value.as_function();
-        //eprintln!("{} {}", *function.name, function.upvalue_count);
         for _ in 0..function.upvalue_count {
             let is_local = code[offset];
             offset += 1;
@@ -369,7 +367,7 @@ impl<'chunk> InstructionDisassembler<'chunk> {
 
             let index = code[offset];
             offset += 1;
-            writeln!(
+            write!(
                 f,
                 "{:04}    |                     {} {}",
                 offset - 2,
@@ -391,7 +389,7 @@ impl<'chunk> InstructionDisassembler<'chunk> {
         let constant = code[offset.as_ref() + 1];
         let arg_count = code[offset.as_ref() + 2];
         let constant_value = &**self.chunk.get_constant(constant);
-        writeln!(
+        write!(
             f,
             "{name:-16} ({arg_count} args) {constant:4} {constant_value}"
         )

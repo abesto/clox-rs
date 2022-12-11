@@ -1,10 +1,8 @@
 use super::Compiler;
-use crate::{
-    scanner::{Token, TokenKind as TK},
-    vm::Output,
-};
+use crate::scanner::{Token, TokenKind as TK};
+use log::error;
 
-impl<'scanner, 'heap, STDOUT: Output, STDERR: Output> Compiler<'scanner, 'heap, STDOUT, STDERR> {
+impl<'compiler, 'arena> Compiler<'compiler, 'arena> {
     pub(super) fn error_at_current(&mut self, msg: &str) {
         // Could probably manually inline `error_at` with a macro to avoid this clone, but... really?
         self.error_at(self.current.clone(), msg);
@@ -20,13 +18,15 @@ impl<'scanner, 'heap, STDOUT: Output, STDERR: Output> Compiler<'scanner, 'heap, 
         }
         self.panic_mode = true;
         if let Some(token) = token.as_ref() {
-            write!(self.stderr, "[line {}] Error", *token.line).unwrap();
-            if token.kind == TK::Eof {
-                write!(self.stderr, " at end").unwrap();
+            let line = *token.line;
+            let at = if token.kind == TK::Eof {
+                String::from(" at end")
             } else if token.kind != TK::Error {
-                write!(self.stderr, " at '{}'", token.as_str()).unwrap();
-            }
-            writeln!(self.stderr, ": {}", msg).unwrap();
+                format!(" at '{}'", token.as_str())
+            } else {
+                String::new()
+            };
+            error!("[line {line}] Error{at}: {msg}");
         }
         self.had_error = true;
     }

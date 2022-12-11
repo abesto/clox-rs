@@ -5,6 +5,7 @@ use std::{
 };
 
 use derivative::Derivative;
+use log::debug;
 use slotmap::{new_key_type, HopSlotMap as SlotMap, Key};
 use std::fmt::{Debug, Display};
 
@@ -93,7 +94,7 @@ impl<K: Key, V: ArenaValue> Arena<K, V> {
         self.bytes_allocated += std::mem::size_of::<V>();
 
         if self.log_gc {
-            eprintln!(
+            debug!(
                 "{}/{:?} allocate {} for {}",
                 self.name,
                 id,
@@ -128,7 +129,7 @@ impl<K: Key, V: ArenaValue> Arena<K, V> {
             return false;
         }
         if self.log_gc {
-            eprintln!("{}/{:?} mark {}", self.name, index, value.item);
+            debug!("{}/{:?} mark {}", self.name, index, value.item);
         }
         value.marked = black_value;
         self.gray.push(index);
@@ -139,7 +140,7 @@ impl<K: Key, V: ArenaValue> Arena<K, V> {
         self.data.retain(|key, value| {
             let retain = value.marked == black_value;
             if !retain && self.log_gc {
-                eprintln!("{}/{:?} free {}", self.name, key, value.item);
+                debug!("{}/{:?} free {}", self.name, key, value.item);
             }
             retain
         });
@@ -273,7 +274,7 @@ impl Heap {
 
     pub fn gc_start(&mut self) {
         if self.log_gc {
-            eprintln!("-- gc begin");
+            debug!("-- gc begin");
         }
 
         self.values
@@ -293,7 +294,7 @@ impl Heap {
 
     pub fn trace(&mut self) {
         if self.log_gc {
-            eprintln!("-- trace start");
+            debug!("-- trace start");
         }
         while !self.functions.gray.is_empty()
             || !self.strings.gray.is_empty()
@@ -321,7 +322,7 @@ impl Heap {
 
     fn blacken_value(&mut self, index: ValueKey) {
         if self.log_gc {
-            eprintln!("Value/{:?} blacken {}", index, self.values[index]);
+            debug!("Value/{:?} blacken {}", index, self.values[index]);
         }
 
         let item = &mut self.values.data[index];
@@ -329,7 +330,7 @@ impl Heap {
             return;
         }
         if self.log_gc {
-            eprintln!("Value/{index:?} mark {}", item.item);
+            debug!("Value/{index:?} mark {}", item.item);
         }
         item.marked = self.black_value;
         self.values.gray.push(index);
@@ -377,21 +378,21 @@ impl Heap {
 
     pub fn blacken_string(&mut self, index: StringKey) {
         if self.log_gc {
-            eprintln!("String/{:?} blacken {}", index, self.strings[index]);
+            debug!("String/{:?} blacken {}", index, self.strings[index]);
         }
         self.strings.mark_raw(index, self.black_value);
     }
 
     pub fn blacken_function(&mut self, index: FunctionKey) {
         if self.log_gc {
-            eprintln!("Function/{:?} blacken {}", index, self.functions[index]);
+            debug!("Function/{:?} blacken {}", index, self.functions[index]);
         }
         let item = &mut self.functions.data[index];
         if item.marked == self.black_value {
             return;
         }
         if self.log_gc {
-            eprintln!("Function/{index:?} mark {}", item.item);
+            debug!("Function/{index:?} mark {}", item.item);
         }
         item.marked = self.black_value;
         self.functions.gray.push(index);
@@ -405,7 +406,7 @@ impl Heap {
 
     pub fn sweep(&mut self) {
         if self.log_gc {
-            eprintln!("-- sweep start");
+            debug!("-- sweep start");
         }
 
         let before = self.bytes_allocated();
@@ -416,8 +417,8 @@ impl Heap {
 
         self.next_gc = self.bytes_allocated() * crate::config::GC_HEAP_GROW_FACTOR;
         if self.log_gc {
-            eprintln!("-- gc end");
-            eprintln!(
+            debug!("-- gc end");
+            debug!(
                 "   collected {} (from {} to {}) next at {}",
                 humansize::format_size(before - self.bytes_allocated(), humansize::BINARY),
                 humansize::format_size(before, humansize::BINARY),
