@@ -369,7 +369,7 @@ impl<'chunk> InstructionDisassembler<'chunk> {
             offset += 1;
             write!(
                 f,
-                "{:04}    |                     {} {}",
+                "\n{:04}    |                     {} {}",
                 offset - 2,
                 if is_local { "local" } else { "upvalue" },
                 index

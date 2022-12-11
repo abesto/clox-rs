@@ -13,7 +13,7 @@ log = "0.4.17"
 monaco = {git = "https://github.com/abesto/rust-monaco.git", rev = "9401e6bab6f406e46cf5a90ff3cb2372c48b7819", features = ["yew-components"]}
 #monaco = {path = "../../rust-monaco", features = ["yew-components"]}
 wasm-bindgen = "0.2.83"
-web-sys = {version = "0.3.60", features = ["HtmlInputElement"]}
+web-sys = {version = "0.3.60", features = ["HtmlInputElement", "HtmlSelectElement"]}
 yew = {version = "0.20", features = ["csr"]}
 
 [profile.release]

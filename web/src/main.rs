@@ -10,7 +10,7 @@ use monaco::{
     yew::{CodeEditor, CodeEditorLink},
 };
 use wasm_bindgen::{prelude::Closure, JsCast};
-use web_sys::HtmlInputElement;
+use web_sys::{HtmlInputElement, HtmlSelectElement};
 use yew::prelude::*;
 
 struct LogEntry {
@@ -109,11 +109,13 @@ impl Flags {
 
 #[function_component(App)]
 fn app() -> Html {
+    let default_code = include_str!("../../programs/fib_short.lox");
+
     // Communicate with the editor
     let text_model =
-        use_state_eq(|| TextModel::create("print 3;", Some(monaco_lox::ID), None).unwrap());
+        use_state_eq(|| TextModel::create(default_code, Some(monaco_lox::ID), None).unwrap());
     // Store the code
-    let code = use_state_eq(|| String::from("print 3;"));
+    let code = use_state_eq(|| String::from(default_code));
     // Control behavior
     let flags = use_state_eq(|| Flags::new());
     // Store the output
@@ -181,6 +183,19 @@ fn app() -> Html {
         )
     };
 
+    // Load examples when requested
+    let on_example_selected = {
+        let text_model = text_model.clone();
+        let code = code.clone();
+        use_callback(
+            move |new_code, text_model| {
+                text_model.set_value(new_code);
+                code.set(String::from(new_code));
+            },
+            text_model,
+        )
+    };
+
     // Handle checkboxes for global flags
     macro_rules! flag_handler {
         ($flags:ident, $n:ident) => {{
@@ -191,23 +206,18 @@ fn app() -> Html {
             }
         }};
     }
-
     let on_show_bytecode_clicked = { use_callback(flag_handler!(flags, PRINT_CODE), ()) };
     let on_trace_clicked = { use_callback(flag_handler!(flags, TRACE_EXECUTION), ()) };
     let on_std_clicked = { use_callback(flag_handler!(flags, STD_MODE), ()) };
     let on_stress_gc_clicked = { use_callback(flag_handler!(flags, STRESS_GC), ()) };
     let on_log_gc_clicked = { use_callback(flag_handler!(flags, LOG_GC), ()) };
 
-    // Trace execution?
-
     html! {
         <div class="main-container">
             <div class="controls">
                 <button onclick={on_run_clicked}>{ "Run (Ctrl/Cmd + Enter)" }</button>
 
-                <select class="examples">
-                <option value="">{ "-- Load an Example --" }</option>
-                </select>
+                <Examples onchange={on_example_selected} />
                 <button>{ "What am I looking at?" }</button>
 
                 <Checkbox label="Show Bytecode" onchange={on_show_bytecode_clicked} />
@@ -292,6 +302,44 @@ pub fn Checkbox(props: &CheckboxProps) -> Html {
             <input type="checkbox" onchange={html_change_handler} />
             {label}
         </label>
+    }
+}
+
+#[derive(PartialEq, Properties)]
+pub struct ExamplesProps {
+    onchange: Callback<&'static str>,
+}
+
+#[function_component]
+pub fn Examples(props: &ExamplesProps) -> Html {
+    let ExamplesProps { onchange } = props;
+
+    let onchange = onchange.clone();
+    let html_on_change = use_callback(
+        |e: Event, onchange| {
+            let select = e.target_dyn_into::<HtmlSelectElement>();
+            if let Some(select) = select {
+                match select.value().as_str() {
+                    "fib" => onchange.emit(include_str!("../../programs/fib_short.lox")),
+                    "nested_classes" => {
+                        onchange.emit(include_str!("../../programs/nested_classes.lox"))
+                    }
+                    "closures" => onchange.emit(include_str!("../../programs/outer.lox")),
+                    _ => unimplemented!(),
+                }
+                select.set_value("");
+            }
+        },
+        onchange,
+    );
+
+    html! {
+        <select class="examples" onchange={html_on_change}>
+            <option value="" selected={true}>{ "-- Load an Example --" }</option>
+            <option value="fib">{"Fibonacci"}</option>
+            <option value="closures">{"Closures"}</option>
+            <option value="nested_classes">{"Nested Classes"}</option>
+        </select>
     }
 }
 
