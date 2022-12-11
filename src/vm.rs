@@ -4,7 +4,7 @@ use std::pin::Pin;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::chunk::InstructionDisassembler;
-use crate::heap::{ValueId, FunctionId};
+use crate::heap::{FunctionId, ValueId};
 use crate::native_functions::NativeFunctions;
 use crate::value::{Class, Closure, Instance, Upvalue};
 use crate::{
@@ -16,7 +16,10 @@ use crate::{
     value::{NativeFunction, NativeFunctionImpl, Value},
 };
 
-#[derive(Debug, PartialEq, Eq)]
+pub trait Output: std::io::Write {}
+impl<T> Output for T where T: std::io::Write {}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(u8)]
 pub enum InterpretResult {
     Ok,
@@ -26,10 +29,13 @@ pub enum InterpretResult {
 
 macro_rules! runtime_error {
     ($self:ident, $($arg:expr),* $(,)?) => {
-        eprintln!($($arg),*);
-        for frame in $self.callstack.iter().rev() {
+        writeln!($self.stderr(), $($arg),*).unwrap();
+        let backtrace = $self.callstack.iter().rev().map(|frame| {
             let line = frame.closure().function.chunk.get_line(&CodeOffset(frame.ip - 1));
-            eprintln!("[line {}] in {}", *line, *frame.closure().function.name);
+            format!("[line {}] in {}", *line, *frame.closure().function.name)
+        }).collect::<Vec<_>>();
+        for line in backtrace {
+            writeln!($self.stderr(), "{line}").unwrap();
         }
     };
 }
@@ -64,7 +70,7 @@ impl CallFrame {
 struct CallStack {
     frames: Vec<CallFrame>,
     current_closure: Option<ValueId>,
-    current_function: Option<FunctionId>
+    current_function: Option<FunctionId>,
 }
 
 impl CallStack {
@@ -73,7 +79,7 @@ impl CallStack {
         Self {
             frames: Vec::with_capacity(crate::config::FRAMES_MAX),
             current_closure: None,
-            current_function: None
+            current_function: None,
         }
     }
 
@@ -94,7 +100,9 @@ impl CallStack {
 
     fn push(&mut self, closure: ValueId, stack_base: usize) {
         self.frames.push(CallFrame {
-            closure, ip: 0, stack_base
+            closure,
+            ip: 0,
+            stack_base,
         });
         self.current_closure = Some(closure);
         self.current_function = Some(closure.as_closure().function);
@@ -127,37 +135,56 @@ impl CallStack {
     }
 }
 
-pub struct VM<Stdout: std::io::Write> {
+pub struct VM<STDOUT: Output, STDERR: Output> {
     heap: Pin<Box<Heap>>,
     callstack: CallStack,
     stack: Vec<ValueId>,
     globals: HashMap<StringId, Global>,
     open_upvalues: VecDeque<ValueId>,
-    stdout: Stdout
+    stdout: Option<STDOUT>,
+    stderr: Option<STDERR>,
 }
 
-impl VM<std::io::Stdout> {
+impl VM<std::io::Stdout, std::io::Stderr> {
     #[must_use]
     pub fn new() -> Self {
-        Self::with_stdout(std::io::stdout())
+        Self::with_streams(std::io::stdout(), std::io::stderr())
     }
 }
 
-impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
+impl<STDOUT, STDERR> VM<STDOUT, STDERR>
+where
+    STDOUT: Output,
+    STDERR: Output,
+{
     #[must_use]
-    pub fn with_stdout(stdout: Stdout) -> Self {
+    pub fn with_streams(stdout: STDOUT, stderr: STDERR) -> Self {
         Self {
             heap: Heap::new(),
             callstack: CallStack::new(),
             stack: Vec::with_capacity(crate::config::STACK_MAX),
             globals: HashMap::default(),
             open_upvalues: VecDeque::new(),
-            stdout
+            // The streams will be `None` only and exactly while we delegate work to `Compiler`.
+            // This could be made safer by using `Rc<RefCell>>` instead, but it doesn't seem like
+            // the performance overhead is justified.
+            stdout: Some(stdout),
+            stderr: Some(stderr),
         }
     }
 
-    pub fn into_stdout(self) -> Stdout {
-        self.stdout
+    // Used in `web`, silence warnings when compiling without `web`
+    #[allow(dead_code)]
+    pub fn into_streams(self) -> (STDOUT, STDERR) {
+        (self.stdout.unwrap(), self.stderr.unwrap())
+    }
+
+    fn stdout(&mut self) -> &mut STDOUT {
+        self.stdout.as_mut().unwrap()
+    }
+
+    fn stderr(&mut self) -> &mut STDERR {
+        self.stderr.as_mut().unwrap()
     }
 
     pub fn interpret(&mut self, source: &[u8]) -> InterpretResult {
@@ -196,27 +223,20 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
                 let function = &self.callstack.function();
                 let mut disassembler = InstructionDisassembler::new(&function.chunk);
                 *disassembler.offset = self.callstack.current().ip;
-                writeln!(
-                    self.stdout,
-                    "          [ {} ]",
-                    self.stack
-                        .iter()
-                        .map(|v| format!("{}", self.heap.values[v]))
-                        .collect::<Vec<_>>()
-                        .join(" ][ ")
-                ).unwrap();
-                write!(self.stdout, "{:?}", disassembler).unwrap();
+                let stack_str = self
+                    .stack
+                    .iter()
+                    .map(|v| format!("{}", self.heap.values[v]))
+                    .collect::<Vec<_>>()
+                    .join(" ][ ");
+                writeln!(self.stdout(), "          [ {stack_str} ]",).unwrap();
+                write!(self.stdout(), "{:?}", disassembler).unwrap();
             }
             self.collect_garbage(stress_gc);
-            match OpCode::try_from(self.read_byte())
-                .expect("Internal error: unrecognized opcode")
-            {
+            match OpCode::try_from(self.read_byte()).expect("Internal error: unrecognized opcode") {
                 OpCode::Print => {
-                    writeln!(
-                        self.stdout,
-                        "{}",
-                        *self.stack.pop().expect("stack underflow in OP_PRINT")
-                    ).unwrap();
+                    let item = &*self.stack.pop().expect("stack underflow in OP_PRINT");
+                    writeln!(self.stdout(), "{item}",).unwrap();
                 }
                 OpCode::Pop => {
                     self.stack.pop().expect("stack underflow in OP_POP");
@@ -246,13 +266,11 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
                     self.jump_if_false();
                 }
                 OpCode::Jump => {
-                    let offset =
-                        self.read_16bit_number();
+                    let offset = self.read_16bit_number();
                     self.callstack.current_mut().ip += offset;
                 }
                 OpCode::Loop => {
-                    let offset =
-                        self.read_16bit_number();
+                    let offset = self.read_16bit_number();
                     self.callstack.current_mut().ip -= offset;
                 }
                 OpCode::Call => {
@@ -287,8 +305,7 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
                         );
                         let is_local = is_local == 1;
 
-                        let index =
-                            usize::from(self.read_byte());
+                        let index = usize::from(self.read_byte());
                         if is_local {
                             closure.upvalues.push(self.capture_upvalue(index));
                         } else {
@@ -340,13 +357,10 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
                 OpCode::Less => binary_op!(self, <),
 
                 OpCode::GetUpvalue => {
-                    let upvalue_index =
-                        usize::from(self.read_byte());
+                    let upvalue_index = usize::from(self.read_byte());
                     let closure_value = &*self.callstack.closure();
                     let closure = closure_value.as_closure();
-                    let upvalue_location = closure.upvalues
-                        [upvalue_index]
-                        .upvalue_location();
+                    let upvalue_location = closure.upvalues[upvalue_index].upvalue_location();
                     match *upvalue_location {
                         Upvalue::Open(absolute_local_index) => {
                             self.stack_push(self.stack[absolute_local_index]);
@@ -355,8 +369,7 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
                     }
                 }
                 OpCode::SetUpvalue => {
-                    let upvalue_index =
-                        usize::from(self.read_byte());
+                    let upvalue_index = usize::from(self.read_byte());
                     let upvalue_location = (*self.callstack.closure()).as_closure().upvalues
                         [upvalue_index]
                         .upvalue_location()
@@ -398,11 +411,11 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
                             if std_mode {
                                 runtime_error!(self, "Only instances have properties.");
                             } else {
+                                let field = self.heap.strings[&field].clone();
+                                let x = x.clone();
                                 runtime_error!(
                                     self,
-                                    "Tried to get property '{}' of non-instance `{}`.",
-                                    *field,
-                                    x
+                                    "Tried to get property '{field}' of non-instance `{x}`.",
                                 );
                             }
                             return InterpretResult::RuntimeError;
@@ -432,11 +445,11 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
                             if std_mode {
                                 runtime_error!(self, "Only instances have fields.");
                             } else {
+                                let field = field.clone();
+                                let x = x.clone();
                                 runtime_error!(
                                     self,
-                                    "Tried to set property '{}' of non-instance `{}`.",
-                                    field,
-                                    x
+                                    "Tried to set property '{field}' of non-instance `{x}`.",
                                 );
                             }
                             return InterpretResult::RuntimeError;
@@ -467,7 +480,7 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
                 OpCode::Inherit => {
                     let superclass_id = self.peek(1).expect("Stack underflow in OP_INHERIT");
                     let superclass = match &self.heap.values[superclass_id] {
-                        Value::Class(superclass) => {superclass }
+                        Value::Class(superclass) => superclass,
                         _ => {
                             runtime_error!(self, "Superclass must be a class.");
                             return InterpretResult::RuntimeError;
@@ -489,7 +502,10 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
                 OpCode::SuperInvoke => {
                     let method_name = self.read_string("OP_SUPER_INVOKE");
                     let arg_count = self.read_byte();
-                    let superclass = self.stack.pop().expect("Stack underflow in OP_SUPER_INVOKE");
+                    let superclass = self
+                        .stack
+                        .pop()
+                        .expect("Stack underflow in OP_SUPER_INVOKE");
                     if !self.invoke_from_class(superclass, method_name, arg_count) {
                         return InterpretResult::RuntimeError;
                     }
@@ -545,14 +561,14 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
             if config::STD_MODE.load() {
                 runtime_error!(self, "Operands must be two numbers or two strings.");
             } else {
+                let operands = self.stack[slice_start..]
+                    .iter()
+                    .map(|v| format!("{}", self.heap.values[v]))
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 runtime_error!(
                     self,
-                    "Operands must be two numbers or two strings. Got: [{}]",
-                    self.stack[slice_start..]
-                        .iter()
-                        .map(|v| format!("{}", self.heap.values[v]))
-                        .collect::<Vec<_>>()
-                        .join(", ")
+                    "Operands must be two numbers or two strings. Got: [{operands}]",
                 );
             }
             return Some(InterpretResult::RuntimeError);
@@ -561,8 +577,7 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
     }
 
     fn equal(&mut self) {
-        let left_id = 
-        self
+        let left_id = self
             .stack
             .pop()
             .expect("stack underflow in OP_EQUAL (first)");
@@ -572,11 +587,11 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
             .expect("stack underflow in OP_EQUAL (second)");
         let left = &self.heap.values[&left_id];
         let right = &self.heap.values[&right_id];
-        
+
         // There's one case where equality-by-reference doesn't imply *actual* equality: NaN
         let value = match (left, right) {
             (Value::Number(left), Value::Number(right)) if left.is_nan() && right.is_nan() => false,
-            (left, right) => left_id == right_id || left == right
+            (left, right) => left_id == right_id || left == right,
         };
         self.stack_push(self.heap.builtin_constants().bool(value));
     }
@@ -711,7 +726,8 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
             Value::String(name) => match self.globals.get(name) {
                 Some(global) => self.stack_push(global.value),
                 None => {
-                    runtime_error!(self, "Undefined variable '{}'.", self.heap.strings[name]);
+                    let variable = self.heap.strings[name].clone();
+                    runtime_error!(self, "Undefined variable '{variable}'.");
                     return Some(InterpretResult::RuntimeError);
                 }
             },
@@ -825,8 +841,12 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
         let value_id = match value {
             Value::Bool(bool) => self.heap.builtin_constants().bool(bool),
             Value::Nil => self.heap.builtin_constants().nil,
-            Value::Number(n) => self.heap.builtin_constants().number(n).unwrap_or_else(|| self.heap.add_value(value)),
-            value => self.heap.add_value(value)
+            Value::Number(n) => self
+                .heap
+                .builtin_constants()
+                .number(n)
+                .unwrap_or_else(|| self.heap.add_value(value)),
+            value => self.heap.add_value(value),
         };
         self.stack.push(value_id);
     }
@@ -850,6 +870,8 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
             Value::Closure(_) => self.execute_call(callee, arg_count),
             Value::NativeFunction(NativeFunction { fun, arity, name }) => {
                 if arg_count != *arity {
+                    let arity = *arity;
+                    let name = name.clone();
                     runtime_error!(
                         self,
                         "Native function '{}' expected {} arguments, got {}.",
@@ -906,9 +928,10 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
     }
 
     fn invoke_from_class(&mut self, class: ValueId, method_name: StringId, arg_count: u8) -> bool {
-        let Some(method) = class.as_class().methods.get(&method_name) else { 
-            runtime_error!(self, "Undefined property '{}'.", self.heap.strings[&method_name]);
-            return false; 
+        let Some(method) = class.as_class().methods.get(&method_name) else {
+            let property = self.heap.strings[&method_name].clone();
+            runtime_error!(self, "Undefined property '{property}'.");
+            return false;
         };
         self.execute_call(*method, arg_count)
     }
@@ -1023,10 +1046,8 @@ impl<Stdout> VM<Stdout> where Stdout: std::io::Write {
             *closure
         );
 
-        self.callstack.push(
-            closure,
-            self.stack.len() - arg_count - 1,
-        );
+        self.callstack
+            .push(closure, self.stack.len() - arg_count - 1);
         true
     }
 

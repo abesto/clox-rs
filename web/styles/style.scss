@@ -32,6 +32,14 @@ html {
   border: 1px solid silver;
 }
 
+.output {
+  display: flex;
+  flex-direction: column;
+}
+.stderr {
+  color: red;
+}
+
 .controls {
   display: flex;
   flex-direction: row;

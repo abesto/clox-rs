@@ -6,7 +6,7 @@ use crate::{
     compiler::Compiler,
     heap::{Heap, StringId, ValueId},
     value::Value,
-    vm::VM,
+    vm::{Output, VM},
 };
 
 fn clock_native(heap: &mut Heap, _args: &[&ValueId]) -> Result<ValueId, String> {
@@ -122,7 +122,7 @@ impl NativeFunctions {
         compiler.inject_strings(&self.string_ids);
     }
 
-    pub fn define_functions<Stdout: std::io::Write>(&self, vm: &mut VM<Stdout>) {
+    pub fn define_functions<STDOUT: Output, STDERR: Output>(&self, vm: &mut VM<STDOUT, STDERR>) {
         vm.define_native(self.string_ids["clock"], 0, clock_native);
         vm.define_native(self.string_ids["sqrt"], 1, sqrt_native);
         vm.define_native(self.string_ids["getattr"], 2, getattr_native);
