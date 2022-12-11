@@ -12,7 +12,7 @@ use monaco::{
     yew::{CodeEditor, CodeEditorLink},
 };
 use wasm_bindgen::{prelude::Closure, JsCast};
-use web_sys::{HtmlInputElement, HtmlSelectElement};
+use web_sys::{HtmlDivElement, HtmlInputElement, HtmlSelectElement};
 use yew::prelude::*;
 
 struct LogEntry {
@@ -368,7 +368,16 @@ pub fn Help(props: &HelpProps) -> Html {
     let HelpProps { onclose } = props;
 
     let onclose = onclose.clone();
-    let onclick = use_callback(move |_, _| onclose.emit(()), ());
+    let onclick = use_callback(
+        move |e: MouseEvent, _| {
+            if let Some(div) = e.target_dyn_into::<HtmlDivElement>() {
+                if div.class_name() == "modal__overlay" {
+                    onclose.emit(());
+                }
+            }
+        },
+        (),
+    );
 
     let preface = Html::from_html_unchecked(AttrValue::from(include_str!("../help/preface.html")));
     let notes = Html::from_html_unchecked(AttrValue::from(include_str!("../help/NOTES.html")));
